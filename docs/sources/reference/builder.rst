@@ -1,12 +1,12 @@
-:title: Build Images (Dockerfile Reference)
+:title: Dockerfile Reference
 :description: Dockerfiles use a simple DSL which allows you to automate the steps you would normally manually take to create an image.
 :keywords: builder, docker, Dockerfile, automation, image creation
 
 .. _dockerbuilder:
 
-===================================
-Build Images (Dockerfile Reference)
-===================================
+====================
+Dockerfile Reference
+====================
 
 **Docker can act as a builder** and read instructions from a text
 ``Dockerfile`` to automate the steps you would otherwise take manually
@@ -147,16 +147,22 @@ the generated images.
 3.3 RUN
 -------
 
-    ``RUN <command>``
+RUN has 2 forms:
 
-The ``RUN`` instruction will execute any commands on the current image
-and commit the results. The resulting committed image will be used for
-the next step in the Dockerfile.
+* ``RUN <command>`` (the command is run in a shell - ``/bin/sh -c``)
+* ``RUN ["executable", "param1", "param2"]`` (*exec* form)
+
+The ``RUN`` instruction will execute any commands in a new layer on top
+of the current image and commit the results. The resulting committed image
+will be used for the next step in the Dockerfile.
 
 Layering ``RUN`` instructions and generating commits conforms to the
 core concepts of Docker where commits are cheap and containers can be
 created from any point in an image's history, much like source
 control.
+
+The *exec* form makes it possible to avoid shell string munging, and to ``RUN``
+commands using a base image that does not contain ``/bin/sh``.
 
 Known Issues (RUN)
 ..................
@@ -263,7 +269,7 @@ the container's filesystem at path ``<dest>``.
 source directory being built (also called the *context* of the build) or
 a remote file URL.
 
-``<dest>`` is the path at which the source will be copied in the
+``<dest>`` is the absolute path to which the source will be copied inside the
 destination container.
 
 All new files and directories are created with mode 0755, uid and gid
@@ -393,8 +399,68 @@ the image.
 
     ``WORKDIR /path/to/workdir``
 
-The ``WORKDIR`` instruction sets the working directory in which
-the command given by ``CMD`` is executed.
+The ``WORKDIR`` instruction sets the working directory for the ``RUN``, ``CMD`` and
+``ENTRYPOINT``  Dockerfile commands that follow it.
+
+It can be used multiple times in the one Dockerfile.
+
+3.11 ONBUILD
+------------
+
+    ``ONBUILD [INSTRUCTION]``
+
+The ``ONBUILD`` instruction adds to the image a "trigger" instruction to be
+executed at a later time, when the image is used as the base for another build.
+The trigger will be executed in the context of the downstream build, as if it
+had been inserted immediately after the *FROM* instruction in the downstream
+Dockerfile.
+
+Any build instruction can be registered as a trigger.
+
+This is useful if you are building an image which will be used as a base to build
+other images, for example an application build environment or a daemon which may be
+customized with user-specific configuration.
+
+For example, if your image is a reusable python application builder, it will require
+application source code to be added in a particular directory, and it might require
+a build script to be called *after* that. You can't just call *ADD* and *RUN* now,
+because you don't yet have access to the application source code, and it will be
+different for each application build. You could simply provide application developers
+with a boilerplate Dockerfile to copy-paste into their application, but that is
+inefficient, error-prone and difficult to update because it mixes with
+application-specific code.
+
+The solution is to use *ONBUILD* to register in advance instructions to run later,
+during the next build stage.
+
+Here's how it works:
+
+1. When it encounters an *ONBUILD* instruction, the builder adds a trigger to
+   the metadata of the image being built.
+   The instruction does not otherwise affect the current build.
+
+2. At the end of the build, a list of all triggers is stored in the image manifest,
+   under the key *OnBuild*. They can be inspected with *docker inspect*.
+
+3. Later the image may be used as a base for a new build, using the *FROM* instruction.
+   As part of processing the *FROM* instruction, the downstream builder looks for *ONBUILD*
+   triggers, and executes them in the same order they were registered. If any of the
+   triggers fail, the *FROM* instruction is aborted which in turn causes the build
+   to fail. If all triggers succeed, the FROM instruction completes and the build
+   continues as usual.
+
+4. Triggers are cleared from the final image after being executed. In other words
+   they are not inherited by "grand-children" builds.
+
+For example you might add something like this:
+
+.. code-block:: bash
+
+    [...]
+    ONBUILD ADD . /app/src
+    ONBUILD RUN /usr/local/bin/python-build --dir /app/src
+    [...]
+
 
 .. _dockerfile_examples:
 

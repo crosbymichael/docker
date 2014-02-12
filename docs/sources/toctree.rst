@@ -17,4 +17,6 @@ This documentation has the following resources:
    reference/index
    contributing/index
    terms/index
+   articles/index
    faq
+   

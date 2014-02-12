@@ -60,7 +60,7 @@ func (env *Env) GetInt64(key string) int64 {
 	s := strings.Trim(env.Get(key), " \t")
 	val, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return -1
+		return 0
 	}
 	return val
 }
@@ -84,6 +84,28 @@ func (env *Env) GetList(key string) []string {
 		l = append(l, sval)
 	}
 	return l
+}
+
+func (env *Env) GetSubEnv(key string) *Env {
+	sval := env.Get(key)
+	if sval == "" {
+		return nil
+	}
+	buf := bytes.NewBufferString(sval)
+	var sub Env
+	if err := sub.Decode(buf); err != nil {
+		return nil
+	}
+	return &sub
+}
+
+func (env *Env) SetSubEnv(key string, sub *Env) error {
+	var buf bytes.Buffer
+	if err := sub.Encode(&buf); err != nil {
+		return err
+	}
+	env.Set(key, string(buf.Bytes()))
+	return nil
 }
 
 func (env *Env) GetJson(key string, iface interface{}) error {
@@ -191,24 +213,6 @@ func (env *Env) WriteTo(dst io.Writer) (n int64, err error) {
 	return 0, env.Encode(dst)
 }
 
-func (env *Env) Export(dst interface{}) (err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("ExportEnv %s", err)
-		}
-	}()
-	var buf bytes.Buffer
-	// step 1: encode/marshal the env to an intermediary json representation
-	if err := env.Encode(&buf); err != nil {
-		return err
-	}
-	// step 2: decode/unmarshal the intermediary json into the destination object
-	if err := json.NewDecoder(&buf).Decode(dst); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (env *Env) Import(src interface{}) (err error) {
 	defer func() {
 		if err != nil {
@@ -313,6 +317,14 @@ func (t *Table) WriteListTo(dst io.Writer) (n int64, err error) {
 	return n + 1, nil
 }
 
+func (t *Table) ToListString() (string, error) {
+	buffer := bytes.NewBuffer(nil)
+	if _, err := t.WriteListTo(buffer); err != nil {
+		return "", err
+	}
+	return buffer.String(), nil
+}
+
 func (t *Table) WriteTo(dst io.Writer) (n int64, err error) {
 	for _, env := range t.Data {
 		bytes, err := env.WriteTo(dst)
@@ -322,6 +334,26 @@ func (t *Table) WriteTo(dst io.Writer) (n int64, err error) {
 		n += bytes
 	}
 	return n, nil
+}
+
+func (t *Table) ReadListFrom(src []byte) (n int64, err error) {
+	var array []interface{}
+
+	if err := json.Unmarshal(src, &array); err != nil {
+		return -1, err
+	}
+
+	for _, item := range array {
+		if m, ok := item.(map[string]interface{}); ok {
+			env := &Env{}
+			for key, value := range m {
+				env.SetAuto(key, value)
+			}
+			t.Add(env)
+		}
+	}
+
+	return int64(len(src)), nil
 }
 
 func (t *Table) ReadFrom(src io.Reader) (n int64, err error) {

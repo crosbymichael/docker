@@ -1,4 +1,4 @@
-FROM stackbrew/ubuntu:12.04
+FROM ubuntu:12.04
 MAINTAINER Nick Stinemates
 #
 #    docker build -t docker:docs . && docker run -p 8000:8000 docker:docs
@@ -8,8 +8,8 @@ MAINTAINER Nick Stinemates
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -yq make python-pip python-setuptools
 # pip installs from docs/requirements.txt, but here to increase cacheability
-RUN pip install Sphinx==1.1.3
-RUN pip install sphinxcontrib-httpdomain==1.1.9
+RUN pip install Sphinx==1.2.1
+RUN pip install sphinxcontrib-httpdomain==1.2.0
 ADD . /docs
 RUN make -C /docs clean docs
 

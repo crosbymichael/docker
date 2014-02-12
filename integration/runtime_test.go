@@ -60,8 +60,8 @@ func cleanup(eng *engine.Engine, t *testing.T) error {
 		t.Fatal(err)
 	}
 	for _, image := range images.Data {
-		if image.Get("ID") != unitTestImageID {
-			mkServerFromEngine(eng, t).ImageDelete(image.Get("ID"), false)
+		if image.Get("Id") != unitTestImageID {
+			eng.Job("image_delete", image.Get("Id")).Run()
 		}
 	}
 	return nil
@@ -125,19 +125,22 @@ func setupBaseImage() {
 	if err != nil {
 		log.Fatalf("Can't initialize engine at %s: %s", unitTestStoreBase, err)
 	}
-	job := eng.Job("initapi")
+	job := eng.Job("initserver")
 	job.Setenv("Root", unitTestStoreBase)
 	job.SetenvBool("Autorestart", false)
 	job.Setenv("BridgeIface", unitTestNetworkBridge)
 	if err := job.Run(); err != nil {
 		log.Fatalf("Unable to create a runtime for tests: %s", err)
 	}
-	srv := mkServerFromEngine(eng, log.New(os.Stderr, "", 0))
 
+	job = eng.Job("inspect", unitTestImageName, "image")
+	img, _ := job.Stdout.AddEnv()
 	// If the unit test is not found, try to download it.
-	if img, err := srv.ImageInspect(unitTestImageName); err != nil || img.ID != unitTestImageID {
+	if err := job.Run(); err != nil || img.Get("id") != unitTestImageID {
 		// Retrieve the Image
-		if err := srv.ImagePull(unitTestImageName, "", os.Stdout, utils.NewStreamFormatter(false), nil, nil, true); err != nil {
+		job = eng.Job("pull", unitTestImageName)
+		job.Stdout.Add(utils.NopWriteCloser(os.Stdout))
+		if err := job.Run(); err != nil {
 			log.Fatalf("Unable to pull the test image: %s", err)
 		}
 	}
@@ -570,7 +573,7 @@ func TestRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job := eng.Job("initapi")
+	job := eng.Job("initserver")
 	job.Setenv("Root", eng.Root())
 	job.SetenvBool("Autorestart", false)
 	if err := job.Run(); err != nil {
@@ -602,7 +605,7 @@ func TestRestore(t *testing.T) {
 }
 
 func TestReloadContainerLinks(t *testing.T) {
-	// FIXME: here we don't use NewTestEngine because it calls initapi with Autorestart=false,
+	// FIXME: here we don't use NewTestEngine because it calls initserver with Autorestart=false,
 	// and we want to set it to true.
 	root, err := newTestDirectory(unitTestStoreBase)
 	if err != nil {
@@ -612,7 +615,7 @@ func TestReloadContainerLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job := eng.Job("initapi")
+	job := eng.Job("initserver")
 	job.Setenv("Root", eng.Root())
 	job.SetenvBool("Autorestart", true)
 	if err := job.Run(); err != nil {
@@ -662,7 +665,7 @@ func TestReloadContainerLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job = eng.Job("initapi")
+	job = eng.Job("initserver")
 	job.Setenv("Root", eng.Root())
 	job.SetenvBool("Autorestart", false)
 	if err := job.Run(); err != nil {

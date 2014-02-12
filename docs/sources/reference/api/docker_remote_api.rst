@@ -46,13 +46,12 @@ Full Documentation
 What's new
 ----------
 
-.. http:get:: /images/json
+.. http:post:: /build
 
-   **New!** This endpoint now returns a list of json message, like the events endpoint
-
-.. http:get:: /images/(name)/history
-
-   **New!** This endpoint now returns a list of json message, like the events endpoint
+   **New!** This endpoint now takes a serialized ConfigFile which it uses to
+   resolve the proper registry auth credentials for pulling the base image.
+   Clients which previously implemented the version accepting an AuthConfig
+   object must be updated.
 
 v1.8
 ****

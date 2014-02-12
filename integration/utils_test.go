@@ -4,9 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"fmt"
-	"github.com/dotcloud/docker"
-	"github.com/dotcloud/docker/engine"
-	"github.com/dotcloud/docker/utils"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -16,6 +13,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dotcloud/docker"
+	"github.com/dotcloud/docker/engine"
+	"github.com/dotcloud/docker/utils"
 )
 
 // This file contains utility functions for docker's unit test suite.
@@ -32,13 +33,18 @@ func mkRuntime(f utils.Fataler) *docker.Runtime {
 	config := &docker.DaemonConfig{
 		Root:        root,
 		AutoRestart: false,
-		Mtu:         docker.DefaultNetworkMtu,
+		Mtu:         docker.GetDefaultNetworkMtu(),
 	}
-	r, err := docker.NewRuntimeFromDirectory(config)
+
+	eng, err := engine.New(root)
 	if err != nil {
 		f.Fatal(err)
 	}
-	r.UpdateCapabilities(true)
+
+	r, err := docker.NewRuntimeFromDirectory(config, eng)
+	if err != nil {
+		f.Fatal(err)
+	}
 	return r
 }
 
@@ -72,10 +78,11 @@ func containerRun(eng *engine.Engine, id string, t utils.Fataler) {
 
 func containerFileExists(eng *engine.Engine, id, dir string, t utils.Fataler) bool {
 	c := getContainer(eng, id, t)
-	if err := c.EnsureMounted(); err != nil {
+	if err := c.Mount(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(path.Join(c.RootfsPath(), dir)); err != nil {
+	defer c.Unmount()
+	if _, err := os.Stat(path.Join(c.BasefsPath(), dir)); err != nil {
 		if os.IsNotExist(err) {
 			return false
 		}
@@ -188,7 +195,7 @@ func NewTestEngine(t utils.Fataler) *engine.Engine {
 	}
 	// Load default plugins
 	// (This is manually copied and modified from main() until we have a more generic plugin system)
-	job := eng.Job("initapi")
+	job := eng.Job("initserver")
 	job.Setenv("Root", root)
 	job.SetenvBool("AutoRestart", false)
 	// TestGetEnabledCors and TestOptionsRoute require EnableCors=true
@@ -336,7 +343,7 @@ func getImages(eng *engine.Engine, t *testing.T, all bool, filter string) *engin
 	job := eng.Job("images")
 	job.SetenvBool("all", all)
 	job.Setenv("filter", filter)
-	images, err := job.Stdout.AddTable()
+	images, err := job.Stdout.AddListTable()
 	if err != nil {
 		t.Fatal(err)
 	}
