@@ -4,6 +4,7 @@ package nsinit
 
 import (
 	"fmt"
+	"github.com/dotcloud/docker/pkg/libcontainer"
 	"github.com/dotcloud/docker/pkg/system"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ const defaultMountFlags = syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NOD
 //
 // There is no need to unmount the new mounts because as soon as the mount namespace
 // is no longer in use, the mounts will be removed automatically
-func setupNewMountNamespace(rootfs, console string, readonly bool) error {
+func setupNewMountNamespace(rootfs string, bindMounts []libcontainer.Mount, console string, readonly bool) error {
 	// mount as slave so that the new mounts do not propagate to the host
 	if err := system.Mount("", "/", "", syscall.MS_SLAVE|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("mounting / as slave %s", err)
@@ -34,6 +35,17 @@ func setupNewMountNamespace(rootfs, console string, readonly bool) error {
 	if err := mountSystem(rootfs); err != nil {
 		return fmt.Errorf("mount system %s", err)
 	}
+
+	for _, m := range bindMounts {
+		flags := syscall.MS_BIND
+		if !m.Writable {
+			flags = flags | syscall.MS_RDONLY
+		}
+		if err := system.Mount(m.Source, filepath.Join(rootfs, m.Destination), "bind", uintptr(flags), ""); err != nil {
+			return fmt.Errorf("mounting %s into %s %s", m.Source, m.Destination, err)
+		}
+	}
+
 	if err := copyDevNodes(rootfs); err != nil {
 		return fmt.Errorf("copy dev nodes %s", err)
 	}

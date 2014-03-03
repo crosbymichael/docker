@@ -714,7 +714,7 @@ func NewRuntimeFromDirectory(config *DaemonConfig, eng *engine.Engine) (*Runtime
 		// to be backwards compatible
 		ed, err = lxc.NewDriver(config.Root, sysInfo.AppArmor)
 	case "native":
-		ed, err = native.NewDriver(path.Join(config.Root, "execdriver", "native"))
+		ed, err = native.NewDriver(path.Join(config.Root, "execdriver", "native"), sysInitPath)
 	default:
 		return nil, fmt.Errorf("unknown exec driver %s", config.ExecDriver)
 	}

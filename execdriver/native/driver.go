@@ -55,15 +55,17 @@ func init() {
 }
 
 type driver struct {
-	root string
+	root     string
+	initPath string
 }
 
-func NewDriver(root string) (*driver, error) {
+func NewDriver(root, initPath string) (*driver, error) {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return nil, err
 	}
 	return &driver{
-		root: root,
+		root:     root,
+		initPath: initPath,
 	}, nil
 }
 
@@ -239,7 +241,7 @@ func (d *dockerCommandFactory) Create(container *libcontainer.Container, console
 	// we need to join the rootfs because nsinit will setup the rootfs and chroot
 	initPath := filepath.Join(d.c.Rootfs, d.c.InitPath)
 
-	d.c.Path = initPath
+	d.c.Path = d.driver.initPath
 	d.c.Args = append([]string{
 		initPath,
 		"-driver", DriverName,
