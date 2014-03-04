@@ -825,7 +825,7 @@ func (srv *Server) DockerInfo(job *engine.Job) engine.Status {
 	v.SetInt("NFd", utils.GetTotalUsedFds())
 	v.SetInt("NGoroutines", runtime.NumGoroutine())
 	v.Set("ExecutionDriver", srv.runtime.execDriver.Name())
-	v.SetInt("NEventsListener", len(srv.events))
+	v.SetInt("NEventsListener", len(srv.listeners))
 	v.Set("KernelVersion", kernelVersion)
 	v.Set("IndexServerAddress", auth.IndexServerAddress())
 	v.Set("InitSha1", dockerversion.INITSHA1)
@@ -1331,7 +1331,12 @@ func (srv *Server) ImagePull(job *engine.Job) engine.Status {
 	defer srv.poolRemove("pull", localName+":"+tag)
 
 	// Resolve the Repository name from fqn to endpoint + name
-	endpoint, remoteName, err := registry.ResolveRepositoryName(localName)
+	hostname, remoteName, err := registry.ResolveRepositoryName(localName)
+	if err != nil {
+		return job.Error(err)
+	}
+
+	endpoint, err := registry.ExpandAndVerifyRegistryUrl(hostname)
 	if err != nil {
 		return job.Error(err)
 	}
@@ -1499,11 +1504,12 @@ func (srv *Server) pushImage(r *registry.Registry, out io.Writer, remote, imgID,
 	defer os.RemoveAll(layerData.Name())
 
 	// Send the layer
-	checksum, err = r.PushImageLayerRegistry(imgData.ID, utils.ProgressReader(layerData, int(layerData.Size), out, sf, false, utils.TruncateID(imgData.ID), "Pushing"), ep, token, jsonRaw)
+	checksum, checksumPayload, err := r.PushImageLayerRegistry(imgData.ID, utils.ProgressReader(layerData, int(layerData.Size), out, sf, false, utils.TruncateID(imgData.ID), "Pushing"), ep, token, jsonRaw)
 	if err != nil {
 		return "", err
 	}
 	imgData.Checksum = checksum
+	imgData.ChecksumPayload = checksumPayload
 	// Send the checksum
 	if err := r.PushImageChecksumRegistry(imgData, ep, token); err != nil {
 		return "", err
@@ -1533,7 +1539,12 @@ func (srv *Server) ImagePush(job *engine.Job) engine.Status {
 	defer srv.poolRemove("push", localName)
 
 	// Resolve the Repository name from fqn to endpoint + name
-	endpoint, remoteName, err := registry.ResolveRepositoryName(localName)
+	hostname, remoteName, err := registry.ResolveRepositoryName(localName)
+	if err != nil {
+		return job.Error(err)
+	}
+
+	endpoint, err := registry.ExpandAndVerifyRegistryUrl(hostname)
 	if err != nil {
 		return job.Error(err)
 	}
@@ -1630,11 +1641,11 @@ func (srv *Server) ContainerCreate(job *engine.Job) engine.Status {
 		return job.Errorf("Minimum memory limit allowed is 512k")
 	}
 	if config.Memory > 0 && !srv.runtime.sysInfo.MemoryLimit {
-		job.Errorf("WARNING: Your kernel does not support memory limit capabilities. Limitation discarded.\n")
+		job.Errorf("Your kernel does not support memory limit capabilities. Limitation discarded.\n")
 		config.Memory = 0
 	}
 	if config.Memory > 0 && !srv.runtime.sysInfo.SwapLimit {
-		job.Errorf("WARNING: Your kernel does not support swap limit capabilities. Limitation discarded.\n")
+		job.Errorf("Your kernel does not support swap limit capabilities. Limitation discarded.\n")
 		config.MemorySwap = -1
 	}
 	resolvConf, err := utils.GetResolvConf()
@@ -1642,7 +1653,7 @@ func (srv *Server) ContainerCreate(job *engine.Job) engine.Status {
 		return job.Error(err)
 	}
 	if !config.NetworkDisabled && len(config.Dns) == 0 && len(srv.runtime.config.Dns) == 0 && utils.CheckLocalDns(resolvConf) {
-		job.Errorf("WARNING: Local (127.0.0.1) DNS resolver found in resolv.conf and containers can't use it. Using default external servers : %v\n", defaultDns)
+		job.Errorf("Local (127.0.0.1) DNS resolver found in resolv.conf and containers can't use it. Using default external servers : %v\n", defaultDns)
 		config.Dns = defaultDns
 	}
 
@@ -1658,7 +1669,7 @@ func (srv *Server) ContainerCreate(job *engine.Job) engine.Status {
 		return job.Error(err)
 	}
 	if !container.Config.NetworkDisabled && srv.runtime.sysInfo.IPv4ForwardingDisabled {
-		job.Errorf("WARNING: IPv4 forwarding is disabled.\n")
+		job.Errorf("IPv4 forwarding is disabled.\n")
 	}
 	srv.LogEvent("create", container.ID, srv.runtime.repositories.ImageName(container.Image))
 	// FIXME: this is necessary because runtime.Create might return a nil container
@@ -1668,7 +1679,7 @@ func (srv *Server) ContainerCreate(job *engine.Job) engine.Status {
 		job.Printf("%s\n", container.ID)
 	}
 	for _, warning := range buildWarnings {
-		return job.Errorf("%s\n", warning)
+		job.Errorf("%s\n", warning)
 	}
 	return engine.StatusOK
 }

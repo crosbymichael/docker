@@ -507,10 +507,10 @@ func (container *Container) Start() (err error) {
 		}
 	}
 
-	for _, elem := range container.Config.Env {
-		env = append(env, elem)
-	}
-
+	// because the env on the container can override certain default values
+	// we need to replace the 'env' keys where they match and append anything
+	// else.
+	env = utils.ReplaceOrAppendEnvValues(env, container.Config.Env)
 	if err := container.generateEnvConfig(env); err != nil {
 		return err
 	}
@@ -840,7 +840,7 @@ func (container *Container) cleanup() {
 	if err := container.stderr.CloseWriters(); err != nil {
 		utils.Errorf("%s: Error close stderr: %s", container.ID, err)
 	}
-	if container.command.Terminal != nil {
+	if container.command != nil && container.command.Terminal != nil {
 		if err := container.command.Terminal.Close(); err != nil {
 			utils.Errorf("%s: Error closing terminal: %s", container.ID, err)
 		}

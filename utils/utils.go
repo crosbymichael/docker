@@ -33,7 +33,7 @@ type Fataler interface {
 // Go is a basic promise implementation: it wraps calls a function in a goroutine,
 // and returns a channel which will later return the function's return value.
 func Go(f func() error) chan error {
-	ch := make(chan error)
+	ch := make(chan error, 1)
 	go func() {
 		ch <- f()
 	}()
@@ -977,4 +977,44 @@ func NewReadCloserWrapper(r io.Reader, closer func() error) io.ReadCloser {
 		Reader: r,
 		closer: closer,
 	}
+}
+
+// ReplaceOrAppendValues returns the defaults with the overrides either
+// replaced by env key or appended to the list
+func ReplaceOrAppendEnvValues(defaults, overrides []string) []string {
+	cache := make(map[string]int, len(defaults))
+	for i, e := range defaults {
+		parts := strings.SplitN(e, "=", 2)
+		cache[parts[0]] = i
+	}
+	for _, value := range overrides {
+		parts := strings.SplitN(value, "=", 2)
+		if i, exists := cache[parts[0]]; exists {
+			defaults[i] = value
+		} else {
+			defaults = append(defaults, value)
+		}
+	}
+	return defaults
+}
+
+// ReadSymlinkedDirectory returns the target directory of a symlink.
+// The target of the symbolic link may not be a file.
+func ReadSymlinkedDirectory(path string) (string, error) {
+	var realPath string
+	var err error
+	if realPath, err = filepath.Abs(path); err != nil {
+		return "", fmt.Errorf("unable to get absolute path for %s: %s", path, err)
+	}
+	if realPath, err = filepath.EvalSymlinks(realPath); err != nil {
+		return "", fmt.Errorf("failed to canonicalise path for %s: %s", path, err)
+	}
+	realPathInfo, err := os.Stat(realPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to stat target '%s' of '%s': %s", realPath, path, err)
+	}
+	if !realPathInfo.Mode().IsDir() {
+		return "", fmt.Errorf("canonical path points to a file '%s'", realPath)
+	}
+	return realPath, nil
 }
