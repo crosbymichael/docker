@@ -434,8 +434,8 @@ func (container *Container) Start() (err error) {
 			container.Config.Hostname = parts[0]
 			container.Config.Domainname = parts[1]
 		}
-		container.HostnamePath = "/etc/hostname"
 		container.HostsPath = "/etc/hosts"
+		container.buildHostname()
 	} else if container.runtime.config.DisableNetwork {
 		container.Config.NetworkDisabled = true
 		container.buildHostnameAndHostsFiles("127.0.1.1")
@@ -637,9 +637,17 @@ func (container *Container) StderrPipe() (io.ReadCloser, error) {
 	return utils.NewBufReader(reader), nil
 }
 
-func (container *Container) buildHostnameAndHostsFiles(IP string) {
+func (container *Container) buildHostname() {
 	container.HostnamePath = path.Join(container.root, "hostname")
-	ioutil.WriteFile(container.HostnamePath, []byte(container.Config.Hostname+"\n"), 0644)
+	if container.Config.Domainname != "" {
+		ioutil.WriteFile(container.HostnamePath, []byte(fmt.Sprintf("%s.%s\n", container.Config.Hostname, container.Config.Domainname)), 0644)
+	} else {
+		ioutil.WriteFile(container.HostnamePath, []byte(container.Config.Hostname+"\n"), 0644)
+	}
+}
+
+func (container *Container) buildHostnameAndHostsFiles(IP string) {
+	container.buildHostname()
 
 	hostsContent := []byte(`
 127.0.0.1	localhost
