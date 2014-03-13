@@ -1098,7 +1098,7 @@ image is removed.
       -i, --interactive=false: Keep stdin open even if not attached
       --privileged=false: Give extended privileges to this container
       -m, --memory="": Memory limit (format: <number><optional unit>, where unit = b, k, m or g)
-      -n, --networking=true: Enable networking for this container
+      --net="bridge": Enable custom network modes (bridge, none, host)
       -p, --publish=[]: Map a network port to the container
       --rm=false: Automatically remove the container when it exits (incompatible with -d)
       -t, --tty=false: Allocate a pseudo-tty
@@ -1119,7 +1119,8 @@ The ``docker run`` command first ``creates`` a writeable container layer over
 the specified image, and then ``starts`` it using the specified command. That
 is, ``docker run`` is equivalent to the API ``/containers/create`` then
 ``/containers/(id)/start``.
-Once the container is stopped it still exists and can be started back up.  See ``docker ps -a`` to view a list of all containers.
+Once the container is stopped it still exists and can be started back up.
+See ``docker ps -a`` to view a list of all containers.
 
 The ``docker run`` command can be used in combination with ``docker commit`` to
 :ref:`change the command that a container runs <cli_commit_examples>`.
@@ -1127,6 +1128,8 @@ The ``docker run`` command can be used in combination with ``docker commit`` to
 See :ref:`port_redirection` for more detailed information about the ``--expose``, 
 ``-p``, ``-P`` and ``--link`` parameters, and :ref:`working_with_links_names` for 
 specific examples using ``--link``.
+
+See also :ref:`run` and :ref:`networking` for more details.
 
 Known Issues (run -volumes-from)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
