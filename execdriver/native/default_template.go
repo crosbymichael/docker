@@ -19,17 +19,27 @@ func createContainer(c *execdriver.Command) *libcontainer.Container {
 	container.Env = c.Env
 
 	if c.Network != nil {
-		container.Networks = []*libcontainer.Network{
-			{
-				Mtu:     c.Network.Mtu,
-				Address: fmt.Sprintf("%s/%d", c.Network.IPAddress, c.Network.IPPrefixLen),
-				Gateway: c.Network.Gateway,
-				Type:    "veth",
-				Context: libcontainer.Context{
-					"prefix": "veth",
-					"bridge": c.Network.Bridge,
+		if c.Network.UseHostNetworkStack {
+			old := container.Namespaces
+			container.Namespaces = libcontainer.Namespaces{}
+			for _, ns := range old {
+				if ns.Key != "NEWNET" {
+					container.Namespaces = append(container.Namespaces, ns)
+				}
+			}
+		} else {
+			container.Networks = []*libcontainer.Network{
+				{
+					Mtu:     c.Network.Mtu,
+					Address: fmt.Sprintf("%s/%d", c.Network.IPAddress, c.Network.IPPrefixLen),
+					Gateway: c.Network.Gateway,
+					Type:    "veth",
+					Context: libcontainer.Context{
+						"prefix": "veth",
+						"bridge": c.Network.Bridge,
+					},
 				},
-			},
+			}
 		}
 	}
 

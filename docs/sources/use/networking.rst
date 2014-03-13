@@ -2,11 +2,21 @@
 :description: Docker networking
 :keywords: network, networking, bridge, docker, documentation
 
+Docker Networking options
+=========================
 
-Configure Networking
-====================
+There are 3 network modes:
 
-Docker uses Linux bridge capabilities to provide network connectivity
+- ``bridged``, the default described below,
+- ``host``, where the container's networking is not isolated from the host;
+  exposed ports are opened without a need to ``--publish`` them, and
+- ``none``, which disconnects your container from the world. This also means
+  ``--link`` cannot work.
+
+Docker Bridge Networking
+========================
+
+By default, Docker uses Linux bridge capabilities to provide network connectivity
 to containers. The ``docker0`` bridge interface is managed by Docker
 for this purpose. When the Docker daemon starts it :
 

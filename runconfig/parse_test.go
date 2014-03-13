@@ -20,3 +20,20 @@ func TestParseLxcConfOpt(t *testing.T) {
 		}
 	}
 }
+
+func TestParseHostNetworkOpts(t *testing.T) {
+	var (
+		config     = &Config{}
+		hostConfig = &HostConfig{}
+	)
+
+	if err := parseNetworkMode("host", config, hostConfig); err != nil {
+		t.Fatal(err)
+	}
+	if !config.NetworkDisabled {
+		t.Fatal("network should be disabled with host networking")
+	}
+	if !hostConfig.UseHostNetworkStack {
+		t.Fatal("use host network stack should be true")
+	}
+}

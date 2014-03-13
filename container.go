@@ -371,6 +371,10 @@ func populateCommand(c *Container) {
 			IPPrefixLen: network.IPPrefixLen,
 			Mtu:         c.runtime.config.Mtu,
 		}
+	} else if c.hostConfig.UseHostNetworkStack {
+		en = &execdriver.Network{
+			UseHostNetworkStack: true,
+		}
 	}
 
 	if lxcConf := c.hostConfig.LxcConf; lxcConf != nil {
@@ -418,7 +422,21 @@ func (container *Container) Start() (err error) {
 		return err
 	}
 
-	if container.runtime.config.DisableNetwork {
+	if container.hostConfig.UseHostNetworkStack {
+		// use the hosts configuration
+		container.Config.Hostname, err = os.Hostname()
+		if err != nil {
+			return err
+		}
+
+		parts := strings.SplitN(container.Config.Hostname, ".", 2)
+		if len(parts) > 1 {
+			container.Config.Hostname = parts[0]
+			container.Config.Domainname = parts[1]
+		}
+		container.HostsPath = "/etc/hosts"
+		container.buildHostname()
+	} else if container.runtime.config.DisableNetwork {
 		container.Config.NetworkDisabled = true
 		container.buildHostnameAndHostsFiles("127.0.1.1")
 	} else {
@@ -619,9 +637,17 @@ func (container *Container) StderrPipe() (io.ReadCloser, error) {
 	return utils.NewBufReader(reader), nil
 }
 
-func (container *Container) buildHostnameAndHostsFiles(IP string) {
+func (container *Container) buildHostname() {
 	container.HostnamePath = path.Join(container.root, "hostname")
-	ioutil.WriteFile(container.HostnamePath, []byte(container.Config.Hostname+"\n"), 0644)
+	if container.Config.Domainname != "" {
+		ioutil.WriteFile(container.HostnamePath, []byte(fmt.Sprintf("%s.%s\n", container.Config.Hostname, container.Config.Domainname)), 0644)
+	} else {
+		ioutil.WriteFile(container.HostnamePath, []byte(container.Config.Hostname+"\n"), 0644)
+	}
+}
+
+func (container *Container) buildHostnameAndHostsFiles(IP string) {
+	container.buildHostname()
 
 	hostsContent := []byte(`
 127.0.0.1	localhost
@@ -644,7 +670,7 @@ ff02::2		ip6-allrouters
 }
 
 func (container *Container) allocateNetwork() error {
-	if container.Config.NetworkDisabled {
+	if container.Config.NetworkDisabled || container.hostConfig.UseHostNetworkStack {
 		return nil
 	}
 

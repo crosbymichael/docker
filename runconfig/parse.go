@@ -47,7 +47,7 @@ func parseRun(cmd *flag.FlagSet, args []string, sysInfo *sysinfo.SysInfo) (*Conf
 
 		flAutoRemove      = cmd.Bool([]string{"#rm", "-rm"}, false, "Automatically remove the container when it exits (incompatible with -d)")
 		flDetach          = cmd.Bool([]string{"d", "-detach"}, false, "Detached mode: Run container in the background, print new container id")
-		flNetwork         = cmd.Bool([]string{"n", "-networking"}, true, "Enable networking for this container")
+		flNetwork         = cmd.Bool([]string{"#n", "#-networking"}, true, "Enable networking for this container")
 		flPrivileged      = cmd.Bool([]string{"#privileged", "-privileged"}, false, "Give extended privileges to this container")
 		flPublishAll      = cmd.Bool([]string{"P", "-publish-all"}, false, "Publish all exposed ports to the host interfaces")
 		flStdin           = cmd.Bool([]string{"i", "-interactive"}, false, "Keep stdin open even if not attached")
@@ -59,6 +59,7 @@ func parseRun(cmd *flag.FlagSet, args []string, sysInfo *sysinfo.SysInfo) (*Conf
 		flUser            = cmd.String([]string{"u", "-user"}, "", "Username or UID")
 		flWorkingDir      = cmd.String([]string{"w", "-workdir"}, "", "Working directory inside the container")
 		flCpuShares       = cmd.Int64([]string{"c", "-cpu-shares"}, 0, "CPU shares (relative weight)")
+		flNetMode         = cmd.String([]string{"-net"}, "bridge", "Enable custom network modes (bridge, none, host)")
 
 		// For documentation purpose
 		_ = cmd.Bool([]string{"#sig-proxy", "-sig-proxy"}, true, "Proxify all received signal to the process (even in non-tty mode)")
@@ -213,6 +214,10 @@ func parseRun(cmd *flag.FlagSet, args []string, sysInfo *sysinfo.SysInfo) (*Conf
 		PublishAllPorts: *flPublishAll,
 	}
 
+	if err := parseNetworkMode(*flNetMode, config, hostConfig); err != nil {
+		return nil, nil, nil, err
+	}
+
 	if sysInfo != nil && flMemory > 0 && !sysInfo.SwapLimit {
 		//fmt.Fprintf(stdout, "WARNING: Your kernel does not support swap limit capabilities. Limitation discarded.\n")
 		config.MemorySwap = -1
@@ -243,4 +248,24 @@ func parseLxcOpt(opt string) (string, string, error) {
 		return "", "", fmt.Errorf("Unable to parse lxc conf option: %s", opt)
 	}
 	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+}
+
+func parseNetworkMode(mode string, config *Config, hostConfig *HostConfig) error {
+	switch mode {
+	case "none":
+		if len(hostConfig.PortBindings) > 0 {
+			return fmt.Errorf("cannot publish any ports when networking is disabled")
+		}
+		config.NetworkDisabled = true
+	case "host":
+		if len(hostConfig.PortBindings) > 0 {
+			return fmt.Errorf("cannot publish any ports when host networking is enabled")
+		}
+		hostConfig.UseHostNetworkStack, config.NetworkDisabled = true, true
+	case "bridge":
+		// nothing to do here
+	default:
+		return fmt.Errorf("unknown networking mode %s", mode)
+	}
+	return nil
 }
