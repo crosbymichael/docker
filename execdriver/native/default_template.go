@@ -43,6 +43,11 @@ func createContainer(c *execdriver.Command) *libcontainer.Container {
 		container.Cgroups.Memory = c.Resources.Memory
 		container.Cgroups.MemorySwap = c.Resources.MemorySwap
 	}
+
+	for _, m := range c.Mounts {
+		container.Mounts = append(container.Mounts, libcontainer.Mount{m.Source, m.Destination, m.Writable})
+	}
+
 	return container
 }
 

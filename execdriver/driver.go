@@ -98,6 +98,12 @@ type Resources struct {
 	CpuShares  int64 `json:"cpu_shares"`
 }
 
+type Mount struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Writable    bool   `json:"writable"`
+}
+
 // Process wrapps an os/exec.Cmd to add more metadata
 type Command struct {
 	exec.Cmd `json:"-"`
@@ -115,6 +121,7 @@ type Command struct {
 	Network    *Network   `json:"network"` // if network is nil then networking is disabled
 	Config     []string   `json:"config"`  //  generic values that specific drivers can consume
 	Resources  *Resources `json:"resources"`
+	Mounts     []Mount    `json:"mounts"`
 
 	Terminal Terminal `json:"-"` // standard or tty terminal
 	Console  string   `json:"-"` // dev/console path
