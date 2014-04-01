@@ -36,6 +36,7 @@ func main() {
 		sysinit.SysInit()
 		return
 	}
+	ahhh
 
 	var (
 		flVersion            = flag.Bool([]string{"v", "-version"}, false, "Print version information and quit")
