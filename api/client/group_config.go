@@ -12,29 +12,29 @@ import (
 )
 
 type GroupContainer struct {
-	Image string
-	Build string
+	Image string `yaml:"image"`
+	Build string `yaml:"build"`
 
-	Command     interface{}
-	Entrypoint  interface{}
-	Environment []string
+	Command     interface{} `yaml:"command"`
+	Entrypoint  interface{} `yaml:"entrypoint"`
+	Environment []string    `yaml:"environment"`
 
-	Ports   []string
-	Volumes []string
-	Links   []string
+	Ports   []string `yaml:"ports"`
+	Volumes []string `yaml:"volumes"`
+	Links   []string `yaml:"links"`
 
-	User       string
+	User       string `yaml:"user"`
 	WorkingDir string `yaml:"working_dir"`
-	Tty        bool
+	Tty        bool   `yaml:"tty"`
 
-	Memory    string
+	Memory    string `yaml:"memory"`
 	CpuShares int64  `yaml:"cpu_shares"`
 	Cpuset    string `yaml:"cpu_set"`
 
-	Privileged bool
+	Privileged bool     `yaml:"privileged"`
 	CapAdd     []string `yaml:"cap_add"`
 	CapDrop    []string `yaml:"cap_drop"`
-	Devices    []string
+	Devices    []string `yaml:"devices"`
 }
 
 type GroupConfig struct {

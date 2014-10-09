@@ -58,6 +58,7 @@ func init() {
 			{"events", "Get real time events from the server"},
 			{"exec", "Run a command in an existing container"},
 			{"export", "Stream the contents of a container as a tar archive"},
+			{"groups", "Manage groups of containers"},
 			{"history", "Show the history of an image"},
 			{"images", "List images"},
 			{"import", "Create a new filesystem image from the contents of a tarball"},
@@ -84,6 +85,7 @@ func init() {
 			{"tag", "Tag an image into a repository"},
 			{"top", "Lookup the running processes of a container"},
 			{"unpause", "Unpause a paused container"},
+			{"up", "Create/update a group from a group.yml"},
 			{"version", "Show the Docker version information"},
 			{"wait", "Block until a container stops, then print its exit code"},
 		} {

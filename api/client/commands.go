@@ -2554,17 +2554,17 @@ func (cli *DockerCli) CmdGroups(args ...string) error {
 	for _, command := range [][]string{
 		{"create", "Create a new group"},
 		{"list", "List all groups"},
-		{"rm", "Remove a group and all of it's containers"},
-		{"start", "Start all the container's in the group"},
-		{"stop", "Stop all the container's in the group"},
+		{"rm", "Remove a group and all of its containers"},
+		{"start", "Start all the containers in the group"},
+		{"stop", "Stop all the containers in the group"},
 		{"containers", "List all containers in a group"},
 	} {
-		description += fmt.Sprintf("    %-10.10s%s\n", command[0], command[1])
+		description += fmt.Sprintf("    %-15.10s%s\n", command[0], command[1])
 	}
 
-	description += "\nRun 'docker groups COMMAND --help' for more information on a command."
+	description += "\nRun 'docker groups SUBCOMMAND --help' for more information on a command."
 
-	cmd := cli.Subcmd("groups", "[COMMAND]", description)
+	cmd := cli.Subcmd("groups", "[SUBCOMMAND]", description)
 
 	if err := cmd.Parse(args); err != nil {
 		return err
