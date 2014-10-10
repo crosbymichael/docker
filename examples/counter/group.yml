@@ -1,4 +1,4 @@
-name: test
+name: counter
 
 containers:
   web:
@@ -6,5 +6,7 @@ containers:
     command: python app.py
     ports:
       - "5000:5000"
+    volumes:
+      - .:/code
   redis:
     image: redis:latest
