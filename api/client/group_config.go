@@ -21,6 +21,7 @@ type GroupContainer struct {
 
 	Ports   []string
 	Volumes []string
+	Links   []string
 
 	User       string
 	WorkingDir string `yaml:"working_dir"`
@@ -145,6 +146,8 @@ func preprocessGroupConfig(raw *GroupConfig, ctx *GroupContext) (*api.Group, err
 				})
 			}
 		}
+
+		container.Links = c.Links
 
 		container.User = c.User
 		container.WorkingDir = c.WorkingDir

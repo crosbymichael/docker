@@ -27,6 +27,8 @@ containers:
     volumes:
       - /data
       - .:/code
+    links:
+      - redis
 
     user: root
     working_dir: /workdir
@@ -78,6 +80,10 @@ var jsonData = []byte(`{
           "Host": "/pwd/on/host",
           "Mode": "rw"
         }
+      ],
+
+      "Links": [
+        "redis"
       ],
 
       "User": "root",
@@ -135,6 +141,10 @@ var expected = &api.Group{
 					Host:      "/pwd/on/host",
 					Mode:      "rw",
 				},
+			},
+
+			Links: []string{
+				"redis",
 			},
 
 			User:       "root",
