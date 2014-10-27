@@ -102,6 +102,7 @@ pages:
 - ['reference/commandline/index.md', '**HIDDEN**']
 - ['reference/commandline/cli.md', 'Reference', 'Command line']
 - ['reference/builder.md', 'Reference', 'Dockerfile']
+- ['reference/group.md', 'Reference', 'group.yml']
 - ['faq.md', 'Reference', 'FAQ']
 - ['reference/run.md', 'Reference', 'Run Reference']
 - ['reference/api/index.md', '**HIDDEN**']
