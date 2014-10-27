@@ -311,23 +311,28 @@ func (daemon *Daemon) fetchGroupsContainers(name string) (map[string]*Container,
 
 func (daemon *Daemon) setGroupContainerVolumesConfig(groupName string, container *Container, ccfg *api.Container) error {
 	groupDir := filepath.Join(daemon.Config().Root, "groups", groupName)
+	volumesDir := filepath.Join(groupDir, "volumes", ccfg.Name)
 
 	container.Volumes = make(map[string]string)
 	container.VolumesRW = make(map[string]bool)
 
-	// TODO: @aanand make this work with volumes defined in the image
+	makeHostPath := func(containerPath string) (string, error) {
+		path := filepath.Join(volumesDir, hashPath(containerPath))
+
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return "", err
+		}
+
+		return path, nil
+	}
+
 	// TODO: @crosbymichael this does not belong here
 	for _, v := range ccfg.Volumes {
 		if v.Host == "" {
-			var (
-				hash = hashPath(v.Container)
-				path = filepath.Join(groupDir, "volumes", ccfg.Name, hash)
-			)
-
-			if err := os.MkdirAll(path, 0644); err != nil {
+			path, err := makeHostPath(v.Container)
+			if err != nil {
 				return err
 			}
-
 			v.Host = path
 		}
 
@@ -336,6 +341,18 @@ func (daemon *Daemon) setGroupContainerVolumesConfig(groupName string, container
 		if v.Mode != "RO" {
 			container.VolumesRW[v.Container] = true
 		}
+	}
+
+	for containerPath, _ := range container.Config.Volumes {
+		if _, alreadyConfigured := container.Volumes[containerPath]; alreadyConfigured {
+			continue
+		}
+		hostPath, err := makeHostPath(containerPath)
+		if err != nil {
+			return err
+		}
+		container.Volumes[containerPath] = hostPath
+		container.VolumesRW[containerPath] = true
 	}
 
 	return nil

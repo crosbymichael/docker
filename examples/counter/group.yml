@@ -12,3 +12,4 @@ containers:
       - redis
   redis:
     image: redis:latest
+    command: redis-server --appendonly yes
