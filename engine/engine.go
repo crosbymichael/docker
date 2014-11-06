@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/docker/docker/pkg/ioutils"
+	"github.com/docker/docker/pkg/timeutils"
 	"github.com/docker/docker/utils"
 )
 
@@ -114,16 +116,17 @@ func (eng *Engine) commands() []string {
 // This function mimics `Command` from the standard os/exec package.
 func (eng *Engine) Job(name string, args ...string) *Job {
 	job := &Job{
-		Eng:    eng,
-		Name:   name,
-		Args:   args,
-		Stdin:  NewInput(),
-		Stdout: NewOutput(),
-		Stderr: NewOutput(),
-		env:    &Env{},
+		Eng:     eng,
+		Name:    name,
+		Args:    args,
+		Stdin:   NewInput(),
+		Stdout:  NewOutput(),
+		Stderr:  NewOutput(),
+		env:     &Env{},
+		closeIO: true,
 	}
 	if eng.Logging {
-		job.Stderr.Add(utils.NopWriteCloser(eng.Stderr))
+		job.Stderr.Add(ioutils.NopWriteCloser(eng.Stderr))
 	}
 
 	// Catchall is shadowed by specific Register.
@@ -253,6 +256,6 @@ func (eng *Engine) Logf(format string, args ...interface{}) (n int, err error) {
 	if !eng.Logging {
 		return 0, nil
 	}
-	prefixedFormat := fmt.Sprintf("[%s] %s\n", eng, strings.TrimRight(format, "\n"))
+	prefixedFormat := fmt.Sprintf("[%s] [%s] %s\n", time.Now().Format(timeutils.RFC3339NanoFixed), eng, strings.TrimRight(format, "\n"))
 	return fmt.Fprintf(eng.Stderr, prefixedFormat, args...)
 }

@@ -70,9 +70,18 @@ func (daemon *Daemon) Containers(job *engine.Job) engine.Status {
 	writeCont := func(container *Container) error {
 		container.Lock()
 		defer container.Unlock()
-		if !container.State.Running && !all && n <= 0 && since == "" && before == "" {
+		if !container.Running && !all && n <= 0 && since == "" && before == "" {
 			return nil
 		}
+
+		if !psFilters.Match("name", container.Name) {
+			return nil
+		}
+
+		if !psFilters.Match("id", container.ID) {
+			return nil
+		}
+
 		if before != "" && !foundBefore {
 			if container.ID == beforeCont.ID {
 				foundBefore = true
@@ -87,10 +96,10 @@ func (daemon *Daemon) Containers(job *engine.Job) engine.Status {
 				return errLast
 			}
 		}
-		if len(filt_exited) > 0 && !container.State.Running {
+		if len(filt_exited) > 0 && !container.Running {
 			should_skip := true
 			for _, code := range filt_exited {
-				if code == container.State.GetExitCode() {
+				if code == container.ExitCode {
 					should_skip = false
 					break
 				}
@@ -98,6 +107,10 @@ func (daemon *Daemon) Containers(job *engine.Job) engine.Status {
 			if should_skip {
 				return nil
 			}
+		}
+
+		if !psFilters.Match("status", container.State.StateString()) {
+			return nil
 		}
 		displayed++
 		out := &engine.Env{}

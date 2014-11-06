@@ -55,3 +55,15 @@ func (m *MultiWriter) Close() (err error) {
 
 	return err
 }
+
+// Clean closes and removes all writers. Last non-eol-terminated part of data
+// will be saved.
+func (m *MultiWriter) Clean() error {
+	m.Lock()
+	for _, w := range m.writers {
+		w.Close()
+	}
+	m.writers = nil
+	m.Unlock()
+	return nil
+}
