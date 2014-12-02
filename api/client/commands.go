@@ -18,10 +18,12 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"text/template"
 	"time"
 
+	"code.google.com/p/go.net/websocket"
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/dockerversion"
@@ -35,6 +37,7 @@ import (
 	"github.com/docker/docker/pkg/parsers/filters"
 	"github.com/docker/docker/pkg/promise"
 	"github.com/docker/docker/pkg/signal"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/docker/pkg/timeutils"
 	"github.com/docker/docker/pkg/units"
@@ -1994,10 +1997,9 @@ func (cli *DockerCli) CmdAttach(args ...string) error {
 		defer signal.StopCatch(sigc)
 	}
 
-	if err := cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?"+v.Encode(), tty, in, cli.out, cli.err, nil, nil); err != nil {
+	if err := cli.websocketsAttach("/containers/"+cmd.Arg(0)+"/attach/ws?"+v.Encode(), tty, in, cli.out, cli.err, nil); err != nil {
 		return err
 	}
-
 	_, status, err := getExitCode(cli, cmd.Arg(0))
 	if err != nil {
 		return err
@@ -2005,7 +2007,6 @@ func (cli *DockerCli) CmdAttach(args ...string) error {
 	if status != 0 {
 		return &utils.StatusError{StatusCode: status}
 	}
-
 	return nil
 }
 
@@ -2374,7 +2375,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 		}
 
 		errCh = promise.Go(func() error {
-			return cli.hijack("POST", "/containers/"+runResult.Get("Id")+"/attach?"+v.Encode(), config.Tty, in, out, stderr, hijacked, nil)
+			return cli.websocketsAttach("/containers/"+runResult.Get("Id")+"/attach/ws?"+v.Encode(), config.Tty, in, out, stderr, hijacked)
 		})
 	} else {
 		close(hijacked)
@@ -2673,6 +2674,104 @@ func (cli *DockerCli) CmdExec(args ...string) error {
 	if status != 0 {
 		return &utils.StatusError{StatusCode: status}
 	}
+
+	return nil
+}
+
+type verboseRW struct {
+	underlying io.ReadWriteCloser
+}
+
+func (v *verboseRW) Write(p []byte) (int, error) {
+	log.Printf("--> in write")
+	return v.underlying.Write(p)
+}
+
+func (v *verboseRW) Read(p []byte) (int, error) {
+	log.Printf("--> in read")
+	return v.underlying.Read(p)
+}
+
+func (v *verboseRW) Close() error {
+	return v.underlying.Close()
+}
+
+func (cli *DockerCli) websocketsAttach(path string, rawTerm bool, in io.ReadCloser, stdout, stderr io.Writer, closer chan io.Closer) error {
+	dc, err := cli.dial()
+	if err != nil {
+		return err
+	}
+	defer dc.Close()
+	config, err := websocket.NewConfig(path, "/")
+	if err != nil {
+		return err
+	}
+
+	conn, err := websocket.NewClient(config, dc)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var oldState *term.State
+	if in != nil && rawTerm && cli.isTerminalIn && os.Getenv("NORAW") == "" {
+		oldState, err = term.SetRawTerminal(cli.inFd)
+		if err != nil {
+			return err
+		}
+		defer term.RestoreTerminal(cli.inFd, oldState)
+	}
+
+	group := &sync.WaitGroup{}
+	if rawTerm {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if _, err := io.Copy(stdout, conn); err != nil {
+				log.Println(err)
+			}
+			if rawTerm && cli.isTerminalIn {
+				term.RestoreTerminal(cli.inFd, oldState)
+			}
+
+			if in != nil {
+				in.Close()
+			}
+			conn.WriteClose(200)
+		}()
+	} else {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if _, err := stdcopy.StdCopy(stdout, stderr, conn); err != nil {
+				log.Println(err)
+			}
+			conn.WriteClose(200)
+			if in != nil {
+				in.Close()
+			}
+		}()
+	}
+	if in != nil {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if _, err := io.Copy(conn, in); err != nil {
+				log.Println(err)
+			}
+			if cw, ok := dc.(interface {
+				CloseWrite() error
+			}); ok {
+				cw.CloseWrite()
+			}
+			conn.WriteClose(200)
+		}()
+	}
+
+	closer <- conn
+	log.Printf("-------> waiting for websocket copy")
+	group.Wait()
+	log.Printf("-------> done waiting for websocket copy")
 
 	return nil
 }

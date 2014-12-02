@@ -920,13 +920,12 @@ func wsContainersAttach(eng *engine.Engine, version version.Version, w http.Resp
 	if vars == nil {
 		return fmt.Errorf("Missing parameter")
 	}
-
 	if err := eng.Job("container_inspect", vars["name"]).Run(); err != nil {
 		return err
 	}
-
 	h := websocket.Handler(func(ws *websocket.Conn) {
 		defer ws.Close()
+		log.Printf("------------> in websocket handler ")
 		job := eng.Job("attach", vars["name"])
 		job.Setenv("logs", r.Form.Get("logs"))
 		job.Setenv("stream", r.Form.Get("stream"))
@@ -940,8 +939,8 @@ func wsContainersAttach(eng *engine.Engine, version version.Version, w http.Resp
 			log.Errorf("Error attaching websocket: %s", err)
 		}
 	})
-	h.ServeHTTP(w, r)
-
+	s := websocket.Server{Handler: h}
+	s.ServeHTTP(w, r)
 	return nil
 }
 
