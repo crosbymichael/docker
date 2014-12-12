@@ -47,6 +47,10 @@ func newClient(jar http.CookieJar, roots *x509.CertPool, certs []tls.Certificate
 		tlsConfig.InsecureSkipVerify = true
 	}
 
+	if !secure {
+		tlsConfig.InsecureSkipVerify = true
+	}
+
 	httpTransport := &http.Transport{
 		DisableKeepAlives: true,
 		Proxy:             http.ProxyFromEnvironment,
