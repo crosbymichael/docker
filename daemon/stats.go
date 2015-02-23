@@ -18,7 +18,7 @@ func (daemon *Daemon) ContainerStats(job *engine.Job) engine.Status {
 	enc := json.NewEncoder(job.Stdout)
 	for v := range updates {
 		update := v.(*execdriver.ResourceStats)
-		ss := convertToAPITypes(update.ContainerStats)
+		ss := convertToAPITypes(update.Stats)
 		ss.MemoryStats.Limit = uint64(update.MemoryLimit)
 		ss.Read = update.Read
 		ss.CpuStats.SystemUsage = update.SystemUsage
@@ -31,20 +31,21 @@ func (daemon *Daemon) ContainerStats(job *engine.Job) engine.Status {
 	return engine.StatusOK
 }
 
-// convertToAPITypes converts the libcontainer.ContainerStats to the api specific
+// convertToAPITypes converts the libcontainer.Stats to the api specific
 // structs.  This is done to preserve API compatibility and versioning.
-func convertToAPITypes(ls *libcontainer.ContainerStats) *stats.Stats {
+func convertToAPITypes(ls *libcontainer.Stats) *stats.Stats {
 	s := &stats.Stats{}
-	if ls.NetworkStats != nil {
-		s.Network = stats.Network{
-			RxBytes:   ls.NetworkStats.RxBytes,
-			RxPackets: ls.NetworkStats.RxPackets,
-			RxErrors:  ls.NetworkStats.RxErrors,
-			RxDropped: ls.NetworkStats.RxDropped,
-			TxBytes:   ls.NetworkStats.TxBytes,
-			TxPackets: ls.NetworkStats.TxPackets,
-			TxErrors:  ls.NetworkStats.TxErrors,
-			TxDropped: ls.NetworkStats.TxDropped,
+	if ls.Interfaces != nil {
+		s.Network = stats.Network{}
+		for _, iface := range ls.Interfaces {
+			s.Network.RxBytes += iface.RxBytes
+			s.Network.RxPackets += iface.RxPackets
+			s.Network.RxErrors += iface.RxErrors
+			s.Network.RxDropped += iface.RxDropped
+			s.Network.TxBytes += iface.TxBytes
+			s.Network.TxPackets += iface.TxPackets
+			s.Network.TxErrors += iface.TxErrors
+			s.Network.TxDropped += iface.TxDropped
 		}
 	}
 	cs := ls.CgroupStats

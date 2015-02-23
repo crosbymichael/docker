@@ -22,7 +22,9 @@ import (
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/docker/utils"
 	"github.com/docker/libcontainer/cgroups"
-	"github.com/docker/libcontainer/mount/nodes"
+	"github.com/docker/libcontainer/configs"
+	"github.com/docker/libcontainer/system"
+	"github.com/docker/libcontainer/user"
 )
 
 const DriverName = "lxc"
@@ -164,7 +166,7 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 	c.ProcessConfig.Path = aname
 	c.ProcessConfig.Args = append([]string{name}, arg...)
 
-	if err := nodes.CreateDeviceNodes(c.Rootfs, c.AutoCreatedDevices); err != nil {
+	if err := createDeviceNodes(c.Rootfs, c.AutoCreatedDevices); err != nil {
 		return execdriver.ExitStatus{ExitCode: -1}, err
 	}
 
@@ -205,6 +207,87 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 	<-waitLock
 
 	return execdriver.ExitStatus{ExitCode: getExitCode(c)}, waitErr
+}
+
+// this is copy from old libcontainer nodes.go
+func createDeviceNodes(rootfs string, nodesToCreate []*configs.Device) error {
+	oldMask := syscall.Umask(0000)
+	defer syscall.Umask(oldMask)
+
+	for _, node := range nodesToCreate {
+		if err := createDeviceNode(rootfs, node); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Creates the device node in the rootfs of the container.
+func createDeviceNode(rootfs string, node *configs.Device) error {
+	var (
+		dest   = filepath.Join(rootfs, node.Path)
+		parent = filepath.Dir(dest)
+	)
+
+	if err := os.MkdirAll(parent, 0755); err != nil {
+		return err
+	}
+
+	fileMode := node.FileMode
+	switch node.Type {
+	case 'c':
+		fileMode |= syscall.S_IFCHR
+	case 'b':
+		fileMode |= syscall.S_IFBLK
+	default:
+		return fmt.Errorf("%c is not a valid device type for device %s", node.Type, node.Path)
+	}
+
+	if err := syscall.Mknod(dest, uint32(fileMode), node.Mkdev()); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("mknod %s %s", node.Path, err)
+	}
+
+	if err := syscall.Chown(dest, int(node.Uid), int(node.Gid)); err != nil {
+		return fmt.Errorf("chown %s to %d:%d", node.Path, node.Uid, node.Gid)
+	}
+
+	return nil
+}
+
+// setupUser changes the groups, gid, and uid for the user inside the container
+// copy from libcontainer, cause not it's private
+func setupUser(userSpec string) error {
+	// Set up defaults.
+	defaultExecUser := user.ExecUser{
+		Uid:  syscall.Getuid(),
+		Gid:  syscall.Getgid(),
+		Home: "/",
+	}
+	passwdPath, err := user.GetPasswdPath()
+	if err != nil {
+		return err
+	}
+	groupPath, err := user.GetGroupPath()
+	if err != nil {
+		return err
+	}
+	execUser, err := user.GetExecUserPath(userSpec, &defaultExecUser, passwdPath, groupPath)
+	if err != nil {
+		return err
+	}
+	if err := system.Setgid(execUser.Gid); err != nil {
+		return err
+	}
+	if err := system.Setuid(execUser.Uid); err != nil {
+		return err
+	}
+	// if we didn't get HOME already, set it based on the user's HOME
+	if envHome := os.Getenv("HOME"); envHome == "" {
+		if err := os.Setenv("HOME", execUser.Home); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 /// Return the exit code of the process

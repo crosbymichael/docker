@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/docker/libcontainer"
-	"github.com/docker/libcontainer/devices"
+	"github.com/docker/libcontainer/configs"
 )
 
 // Context is a generic key value pair that allows
@@ -105,7 +105,7 @@ type Resources struct {
 }
 
 type ResourceStats struct {
-	*libcontainer.ContainerStats
+	*libcontainer.Stats
 	Read        time.Time `json:"read"`
 	MemoryLimit int64     `json:"memory_limit"`
 	SystemUsage uint64    `json:"system_usage"`
@@ -145,8 +145,8 @@ type Command struct {
 	Pid                *Pid              `json:"pid"`
 	Resources          *Resources        `json:"resources"`
 	Mounts             []Mount           `json:"mounts"`
-	AllowedDevices     []*devices.Device `json:"allowed_devices"`
-	AutoCreatedDevices []*devices.Device `json:"autocreated_devices"`
+	AllowedDevices     []*configs.Device `json:"allowed_devices"`
+	AutoCreatedDevices []*configs.Device `json:"autocreated_devices"`
 	CapAdd             []string          `json:"cap_add"`
 	CapDrop            []string          `json:"cap_drop"`
 	ContainerPid       int               `json:"container_pid"`  // the pid for the process inside a container

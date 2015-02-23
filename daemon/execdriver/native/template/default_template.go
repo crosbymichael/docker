@@ -1,14 +1,13 @@
 package template
 
 import (
-	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/apparmor"
-	"github.com/docker/libcontainer/cgroups"
+	"github.com/docker/libcontainer/configs"
 )
 
 // New returns the docker default configuration for libcontainer
-func New() *libcontainer.Config {
-	container := &libcontainer.Config{
+func New() *configs.Config {
+	container := &configs.Config{
 		Capabilities: []string{
 			"CHOWN",
 			"DAC_OVERRIDE",
@@ -25,18 +24,17 @@ func New() *libcontainer.Config {
 			"KILL",
 			"AUDIT_WRITE",
 		},
-		Namespaces: libcontainer.Namespaces([]libcontainer.Namespace{
+		Namespaces: configs.Namespaces([]configs.Namespace{
 			{Type: "NEWNS"},
 			{Type: "NEWUTS"},
 			{Type: "NEWIPC"},
 			{Type: "NEWPID"},
 			{Type: "NEWNET"},
 		}),
-		Cgroups: &cgroups.Cgroup{
+		Cgroups: &configs.Cgroup{
 			Parent:          "docker",
 			AllowAllDevices: false,
 		},
-		MountConfig: &libcontainer.MountConfig{},
 	}
 
 	if apparmor.IsEnabled() {

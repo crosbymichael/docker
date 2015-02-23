@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -22,12 +21,10 @@ import (
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/apparmor"
-	"github.com/docker/libcontainer/cgroups/fs"
 	"github.com/docker/libcontainer/cgroups/systemd"
-	consolepkg "github.com/docker/libcontainer/console"
-	"github.com/docker/libcontainer/namespaces"
-	_ "github.com/docker/libcontainer/namespaces/nsenter"
+	"github.com/docker/libcontainer/configs"
 	"github.com/docker/libcontainer/system"
+	"github.com/docker/libcontainer/utils"
 )
 
 const (
@@ -35,16 +32,12 @@ const (
 	Version    = "0.2"
 )
 
-type activeContainer struct {
-	container *libcontainer.Config
-	cmd       *exec.Cmd
-}
-
 type driver struct {
 	root             string
 	initPath         string
-	activeContainers map[string]*activeContainer
+	activeContainers map[string]libcontainer.Container
 	machineMemory    int64
+	factory          libcontainer.Factory
 	sync.Mutex
 }
 
@@ -61,11 +54,25 @@ func NewDriver(root, initPath string) (*driver, error) {
 	if err := apparmor.InstallDefaultProfile(); err != nil {
 		return nil, err
 	}
+	var f libcontainer.Factory
+	if systemd.UseSystemd() {
+		f, err = libcontainer.New(root, libcontainer.SystemdCgroups)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		f, err = libcontainer.New(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &driver{
 		root:             root,
 		initPath:         initPath,
-		activeContainers: make(map[string]*activeContainer),
+		activeContainers: make(map[string]libcontainer.Container),
 		machineMemory:    meminfo.MemTotal,
+		factory:          f,
 	}, nil
 }
 
@@ -81,10 +88,22 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 		return execdriver.ExitStatus{ExitCode: -1}, err
 	}
 
+	//if err := d.createContainerRoot(c.ID); err != nil {
+	//return execdriver.ExitStatus{ExitCode: -1}, err
+	//}
+
+	//if err := d.writeContainerFile(container, c.ID); err != nil {
+	//return execdriver.ExitStatus{ExitCode: -1}, err
+	//}
+
 	var term execdriver.Terminal
 
 	if c.ProcessConfig.Tty {
-		term, err = NewTtyConsole(&c.ProcessConfig, pipes)
+		rootuid, err := container.HostUID()
+		if err != nil {
+			return execdriver.ExitStatus{ExitCode: -1}, err
+		}
+		term, err = NewTtyConsole(&c.ProcessConfig, pipes, rootuid)
 	} else {
 		term, err = execdriver.NewStdConsole(&c.ProcessConfig, pipes)
 	}
@@ -93,84 +112,59 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 	}
 	c.ProcessConfig.Terminal = term
 
+	cont, err := d.factory.Create(c.ID, container)
+	if err != nil {
+		return execdriver.ExitStatus{ExitCode: -1}, err
+	}
 	d.Lock()
-	d.activeContainers[c.ID] = &activeContainer{
-		container: container,
-		cmd:       &c.ProcessConfig.Cmd,
-	}
+	d.activeContainers[c.ID] = cont
 	d.Unlock()
-
-	var (
-		dataPath = filepath.Join(d.root, c.ID)
-		args     = append([]string{c.ProcessConfig.Entrypoint}, c.ProcessConfig.Arguments...)
-	)
-
-	if err := d.createContainerRoot(c.ID); err != nil {
-		return execdriver.ExitStatus{ExitCode: -1}, err
-	}
-	defer d.cleanContainer(c.ID)
-
-	if err := d.writeContainerFile(container, c.ID); err != nil {
-		return execdriver.ExitStatus{ExitCode: -1}, err
-	}
-
-	execOutputChan := make(chan execOutput, 1)
-	waitForStart := make(chan struct{})
-
-	go func() {
-		exitCode, err := namespaces.Exec(container, c.ProcessConfig.Stdin, c.ProcessConfig.Stdout, c.ProcessConfig.Stderr, c.ProcessConfig.Console, dataPath, args, func(container *libcontainer.Config, console, dataPath, init string, child *os.File, args []string) *exec.Cmd {
-			c.ProcessConfig.Path = d.initPath
-			c.ProcessConfig.Args = append([]string{
-				DriverName,
-				"-console", console,
-				"-pipe", "3",
-				"-root", filepath.Join(d.root, c.ID),
-				"--",
-			}, args...)
-
-			// set this to nil so that when we set the clone flags anything else is reset
-			c.ProcessConfig.SysProcAttr = &syscall.SysProcAttr{
-				Cloneflags: uintptr(namespaces.GetNamespaceFlags(container.Namespaces)),
-			}
-			c.ProcessConfig.ExtraFiles = []*os.File{child}
-
-			c.ProcessConfig.Env = container.Env
-			c.ProcessConfig.Dir = container.RootFs
-
-			return &c.ProcessConfig.Cmd
-		}, func() {
-			close(waitForStart)
-			if startCallback != nil {
-				c.ContainerPid = c.ProcessConfig.Process.Pid
-				startCallback(&c.ProcessConfig, c.ContainerPid)
-			}
-		})
-		execOutputChan <- execOutput{exitCode, err}
+	defer func() {
+		cont.Destroy()
+		d.cleanContainer(c.ID)
 	}()
 
-	select {
-	case execOutput := <-execOutputChan:
-		return execdriver.ExitStatus{ExitCode: execOutput.exitCode}, execOutput.err
-	case <-waitForStart:
-		break
+	args := append([]string{c.ProcessConfig.Entrypoint}, c.ProcessConfig.Arguments...)
+	p := &libcontainer.Process{
+		Args:   append([]string{DriverName}, args...),
+		Env:    c.ProcessConfig.Env,
+		Stdin:  c.ProcessConfig.Stdin,
+		Stdout: c.ProcessConfig.Stdout,
+		Stderr: c.ProcessConfig.Stderr,
+		Cwd:    c.ProcessConfig.Cmd.Dir,
+		User:   c.ProcessConfig.User,
+	}
+
+	if err := cont.Start(p); err != nil {
+		return execdriver.ExitStatus{ExitCode: -1}, err
+	}
+
+	if startCallback != nil {
+		pid, err := p.Pid()
+		if err != nil {
+			p.Signal(os.Kill)
+			p.Wait()
+			return execdriver.ExitStatus{ExitCode: -1}, err
+		}
+		startCallback(&c.ProcessConfig, pid)
+	}
+
+	ps, err := p.Wait()
+	if err != nil {
+		p.Signal(os.Kill)
+		p.Wait()
+		return execdriver.ExitStatus{ExitCode: -1}, err
 	}
 
 	oomKill := false
-	state, err := libcontainer.GetState(filepath.Join(d.root, c.ID))
+	oomKillNotification, err := cont.NotifyOOM()
 	if err == nil {
-		oomKillNotification, err := libcontainer.NotifyOnOOM(state)
-		if err == nil {
-			_, oomKill = <-oomKillNotification
-		} else {
-			log.Warnf("WARNING: Your kernel does not support OOM notifications: %s", err)
-		}
+		_, oomKill = <-oomKillNotification
 	} else {
-		log.Warnf("Failed to get container state, oom notify will not work: %s", err)
+		log.Warnf("WARNING: Your kernel does not support OOM notifications: %s", err)
 	}
-	// wait for the container to exit.
-	execOutput := <-execOutputChan
 
-	return execdriver.ExitStatus{ExitCode: execOutput.exitCode, OOMKilled: oomKill}, execOutput.err
+	return execdriver.ExitStatus{ExitCode: utils.ExitStatus(ps.Sys().(syscall.WaitStatus)), OOMKilled: oomKill}, nil
 }
 
 func (d *driver) Kill(p *execdriver.Command, sig int) error {
@@ -185,11 +179,7 @@ func (d *driver) Pause(c *execdriver.Command) error {
 	if active == nil {
 		return fmt.Errorf("active container for %s does not exist", c.ID)
 	}
-	active.container.Cgroups.Freezer = "FROZEN"
-	if systemd.UseSystemd() {
-		return systemd.Freeze(active.container.Cgroups, active.container.Cgroups.Freezer)
-	}
-	return fs.Freeze(active.container.Cgroups, active.container.Cgroups.Freezer)
+	return active.Pause()
 }
 
 func (d *driver) Unpause(c *execdriver.Command) error {
@@ -197,44 +187,31 @@ func (d *driver) Unpause(c *execdriver.Command) error {
 	if active == nil {
 		return fmt.Errorf("active container for %s does not exist", c.ID)
 	}
-	active.container.Cgroups.Freezer = "THAWED"
-	if systemd.UseSystemd() {
-		return systemd.Freeze(active.container.Cgroups, active.container.Cgroups.Freezer)
-	}
-	return fs.Freeze(active.container.Cgroups, active.container.Cgroups.Freezer)
+	return active.Resume()
 }
 
-func (d *driver) Terminate(p *execdriver.Command) error {
+func (d *driver) Terminate(c *execdriver.Command) error {
 	// lets check the start time for the process
-	state, err := libcontainer.GetState(filepath.Join(d.root, p.ID))
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		// TODO: Remove this part for version 1.2.0
-		// This is added only to ensure smooth upgrades from pre 1.1.0 to 1.1.0
-		data, err := ioutil.ReadFile(filepath.Join(d.root, p.ID, "start"))
-		if err != nil {
-			// if we don't have the data on disk then we can assume the process is gone
-			// because this is only removed after we know the process has stopped
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
-		state = &libcontainer.State{InitStartTime: string(data)}
+	active := d.activeContainers[c.ID]
+	if active == nil {
+		return fmt.Errorf("active container for %s does not exist", c.ID)
 	}
+	state, err := active.State()
+	if err != nil {
+		return err
+	}
+	pid := state.InitProcessPid
 
-	currentStartTime, err := system.GetProcessStartTime(p.ProcessConfig.Process.Pid)
+	currentStartTime, err := system.GetProcessStartTime(pid)
 	if err != nil {
 		return err
 	}
 
-	if state.InitStartTime == currentStartTime {
-		err = syscall.Kill(p.ProcessConfig.Process.Pid, 9)
-		syscall.Wait4(p.ProcessConfig.Process.Pid, nil, 0, nil)
+	if state.InitProcessStartTime == currentStartTime {
+		err = syscall.Kill(pid, 9)
+		syscall.Wait4(pid, nil, 0, nil)
 	}
-	d.cleanContainer(p.ID)
+	d.cleanContainer(c.ID)
 
 	return err
 
@@ -259,15 +236,10 @@ func (d *driver) GetPidsForContainer(id string) ([]int, error) {
 	if active == nil {
 		return nil, fmt.Errorf("active container for %s does not exist", id)
 	}
-	c := active.container.Cgroups
-
-	if systemd.UseSystemd() {
-		return systemd.GetPids(c)
-	}
-	return fs.GetPids(c)
+	return active.Processes()
 }
 
-func (d *driver) writeContainerFile(container *libcontainer.Config, id string) error {
+func (d *driver) writeContainerFile(container *configs.Config, id string) error {
 	data, err := json.Marshal(container)
 	if err != nil {
 		return err
@@ -292,28 +264,21 @@ func (d *driver) Clean(id string) error {
 
 func (d *driver) Stats(id string) (*execdriver.ResourceStats, error) {
 	c := d.activeContainers[id]
-	state, err := libcontainer.GetState(filepath.Join(d.root, id))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, execdriver.ErrNotRunning
-		}
-		return nil, err
-	}
 	now := time.Now()
-	stats, err := libcontainer.GetStats(nil, state)
+	stats, err := c.Stats()
 	if err != nil {
 		return nil, err
 	}
-	memoryLimit := c.container.Cgroups.Memory
+	memoryLimit := c.Config().Cgroups.Memory
 	// if the container does not have any memory limit specified set the
 	// limit to the machines memory
 	if memoryLimit == 0 {
 		memoryLimit = d.machineMemory
 	}
 	return &execdriver.ResourceStats{
-		Read:           now,
-		ContainerStats: stats,
-		MemoryLimit:    memoryLimit,
+		Stats:       stats,
+		Read:        now,
+		MemoryLimit: memoryLimit,
 	}, nil
 }
 
@@ -328,38 +293,34 @@ func getEnv(key string, env []string) string {
 }
 
 type TtyConsole struct {
-	MasterPty *os.File
+	MasterPty libcontainer.Console
 }
 
-func NewTtyConsole(processConfig *execdriver.ProcessConfig, pipes *execdriver.Pipes) (*TtyConsole, error) {
-	ptyMaster, console, err := consolepkg.CreateMasterAndConsole()
+func NewTtyConsole(pc *execdriver.ProcessConfig, pipes *execdriver.Pipes, rootuid int) (*TtyConsole, error) {
+	console, err := libcontainer.NewConsole(rootuid, rootuid)
 	if err != nil {
 		return nil, err
 	}
 
 	tty := &TtyConsole{
-		MasterPty: ptyMaster,
+		MasterPty: console,
 	}
 
-	if err := tty.AttachPipes(&processConfig.Cmd, pipes); err != nil {
+	if err := tty.AttachPipes(pipes); err != nil {
 		tty.Close()
 		return nil, err
 	}
 
-	processConfig.Console = console
+	pc.Console = console.Path()
 
 	return tty, nil
-}
-
-func (t *TtyConsole) Master() *os.File {
-	return t.MasterPty
 }
 
 func (t *TtyConsole) Resize(h, w int) error {
 	return term.SetWinsize(t.MasterPty.Fd(), &term.Winsize{Height: uint16(h), Width: uint16(w)})
 }
 
-func (t *TtyConsole) AttachPipes(command *exec.Cmd, pipes *execdriver.Pipes) error {
+func (t *TtyConsole) AttachPipes(pipes *execdriver.Pipes) error {
 	go func() {
 		if wb, ok := pipes.Stdout.(interface {
 			CloseWriters() error
