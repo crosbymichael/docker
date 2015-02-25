@@ -3,7 +3,6 @@
 package native
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"runtime"
@@ -26,10 +25,6 @@ func fatal(err error) {
 }
 
 func initializer() {
-	runtime.LockOSThread()
-
-	flag.Parse()
-
 	runtime.GOMAXPROCS(1)
 	runtime.LockOSThread()
 	factory, err := libcontainer.New("")

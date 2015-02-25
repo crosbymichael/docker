@@ -17,6 +17,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/execdriver"
+	"github.com/docker/docker/pkg/reexec"
 	sysinfo "github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/pkg/term"
 	"github.com/docker/libcontainer"
@@ -54,19 +55,15 @@ func NewDriver(root, initPath string) (*driver, error) {
 	if err := apparmor.InstallDefaultProfile(); err != nil {
 		return nil, err
 	}
-	var f libcontainer.Factory
+	cgm := libcontainer.Cgroupfs
 	if systemd.UseSystemd() {
-		f, err = libcontainer.New(root, libcontainer.SystemdCgroups)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		f, err = libcontainer.New(root)
-		if err != nil {
-			return nil, err
-		}
+		cgm = libcontainer.SystemdCgroups
 	}
-
+	log.Println(reexec.Self())
+	f, err := libcontainer.New(root, cgm, libcontainer.InitPath(reexec.Self(), DriverName))
+	if err != nil {
+		return nil, err
+	}
 	return &driver{
 		root:             root,
 		initPath:         initPath,
