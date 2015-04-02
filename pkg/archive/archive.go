@@ -35,6 +35,7 @@ type (
 		Compression     Compression
 		NoLchown        bool
 		Name            string
+		RemapRootUID    int
 	}
 
 	// Archiver allows the reuse of most utility functions of this package
@@ -292,6 +293,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 		file.Close()
 
 	case tar.TypeBlock, tar.TypeChar, tar.TypeFifo:
+		return nil
 		mode := uint32(hdr.Mode & 07777)
 		switch hdr.Typeflag {
 		case tar.TypeBlock:
@@ -338,6 +340,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 		return fmt.Errorf("Unhandled tar header type %d\n", hdr.Typeflag)
 	}
 
+	//	fmt.Printf("-----------> %d %d\n", hdr.Uid, hdr.Gid)
 	if err := os.Lchown(path, hdr.Uid, hdr.Gid); err != nil && Lchown {
 		return err
 	}
@@ -373,7 +376,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 // Tar creates an archive from the directory at `path`, and returns it as a
 // stream of bytes.
 func Tar(path string, compression Compression) (io.ReadCloser, error) {
-	return TarWithOptions(path, &TarOptions{Compression: compression})
+	return TarWithOptions(path, &TarOptions{Compression: compression, RemapRootUID: 1000})
 }
 
 func escapeName(name string) string {

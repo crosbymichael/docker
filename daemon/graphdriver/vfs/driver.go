@@ -39,12 +39,13 @@ func (d *Driver) Cleanup() error {
 
 func (d *Driver) Create(id, parent string) error {
 	dir := d.dir(id)
-	if err := os.MkdirAll(path.Dir(dir), 0700); err != nil {
+	if err := os.MkdirAll(path.Dir(dir), 0777); err != nil {
 		return err
 	}
-	if err := os.Mkdir(dir, 0755); err != nil {
+	if err := os.Mkdir(dir, 0777); err != nil {
 		return err
 	}
+	os.Chown(dir, 1000, 1000)
 	opts := []string{"level:s0"}
 	if _, mountLabel, err := label.InitLabels(opts); err == nil {
 		label.SetFileLabel(dir, mountLabel)

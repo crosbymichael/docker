@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -63,6 +64,23 @@ func ApplyLayer(dest string, layer archive.ArchiveReader) (size int64, err error
 
 	cmd := reexec.Command("docker-applyLayer", dest)
 	cmd.Stdin = decompressed
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWUSER
+	cmd.SysProcAttr.Credential = &syscall.Credential{}
+	cmd.SysProcAttr.UidMappings = []syscall.SysProcIDMap{
+		{
+			ContainerID: 0,
+			HostID:      1000,
+			Size:        math.MaxInt32 - 1000,
+		},
+	}
+	cmd.SysProcAttr.GidMappings = []syscall.SysProcIDMap{
+		{
+			ContainerID: 0,
+			HostID:      1000,
+			Size:        math.MaxInt32 - 1000,
+		},
+	}
 
 	outBuf, errBuf := new(bytes.Buffer), new(bytes.Buffer)
 	cmd.Stdout, cmd.Stderr = outBuf, errBuf

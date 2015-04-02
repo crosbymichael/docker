@@ -668,7 +668,7 @@ func (daemon *Daemon) newContainer(name string, config *runconfig.Config, imgID 
 func (daemon *Daemon) createRootfs(container *Container) error {
 	// Step 1: create the container directory.
 	// This doubles as a barrier to avoid race conditions.
-	if err := os.Mkdir(container.root, 0700); err != nil {
+	if err := os.Mkdir(container.root, 0757); err != nil {
 		return err
 	}
 	initID := fmt.Sprintf("%s-init", container.ID)
@@ -902,7 +902,7 @@ func NewDaemonFromDirectory(config *Config, eng *engine.Engine, registryService 
 
 	daemonRepo := path.Join(config.Root, "containers")
 
-	if err := os.MkdirAll(daemonRepo, 0700); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(daemonRepo, 0757); err != nil && !os.IsExist(err) {
 		return nil, err
 	}
 

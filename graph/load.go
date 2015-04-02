@@ -42,7 +42,10 @@ func (s *TagStore) CmdLoad(job *engine.Job) error {
 		excludes[i] = k
 		i++
 	}
-	if err := chrootarchive.Untar(job.Stdin, repoDir, &archive.TarOptions{ExcludePatterns: excludes}); err != nil {
+	if err := chrootarchive.Untar(job.Stdin, repoDir, &archive.TarOptions{
+		ExcludePatterns: excludes,
+		RemapRootUID:    1000,
+	}); err != nil {
 		return err
 	}
 

@@ -81,6 +81,24 @@ func Untar(tarArchive io.Reader, dest string, options *archive.TarOptions) error
 	cmd := reexec.Command("docker-untar", dest)
 	cmd.Stdin = decompressedArchive
 	cmd.Env = append(cmd.Env, fmt.Sprintf("OPT=%s", data))
+	if options.RemapRootUID != 0 {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWUSER
+		cmd.SysProcAttr.UidMappings = []syscall.SysProcIDMap{
+			{
+				ContainerID: 0,
+				HostID:      options.RemapRootUID,
+				Size:        1,
+			},
+		}
+		cmd.SysProcAttr.GidMappings = []syscall.SysProcIDMap{
+			{
+				ContainerID: 0,
+				HostID:      options.RemapRootUID,
+				Size:        1,
+			},
+		}
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Untar %s %s", err, out)

@@ -5,11 +5,14 @@ package native
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/execdriver"
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/docker/libcontainer/apparmor"
@@ -69,6 +72,18 @@ func (d *driver) createContainer(c *execdriver.Command) (*configs.Config, error)
 		return nil, err
 	}
 	d.setupRlimits(container, c)
+
+	userns_uid := 1000
+	container.UidMappings = []configs.IDMap{
+		{ContainerID: 0, HostID: userns_uid, Size: math.MaxInt32 - userns_uid},
+	}
+	container.GidMappings = []configs.IDMap{
+		{ContainerID: 0, HostID: userns_uid, Size: math.MaxInt32 - userns_uid},
+	}
+	for _, node := range container.Devices {
+		node.Uid = uint32(userns_uid)
+		node.Gid = uint32(userns_uid)
+	}
 	return container, nil
 }
 
@@ -243,6 +258,10 @@ func (d *driver) setupMounts(container *configs.Config, c *execdriver.Command) e
 		if m.Slave {
 			flags |= syscall.MS_SLAVE
 		}
+		if err := os.Chown(m.Source, 1000, 1000); err != nil {
+			return err
+		}
+		logrus.Info(m.Source)
 
 		container.Mounts = append(container.Mounts, &configs.Mount{
 			Source:      m.Source,
