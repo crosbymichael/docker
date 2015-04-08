@@ -5,11 +5,13 @@ package main
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/api/v2"
 	"github.com/docker/docker/autogen/dockerversion"
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/builtins"
@@ -132,6 +134,10 @@ func mainDaemon() {
 			return
 		}
 		daemonInitWait <- nil
+		apiv2 := v2.New(v2.InternalDaemon(d))
+		if err := http.ListenAndServe("127.0.0.1:4243", apiv2); err != nil {
+			panic(err)
+		}
 	}()
 
 	// Serve api
@@ -160,7 +166,6 @@ func mainDaemon() {
 		}
 		serveAPIWait <- nil
 	}()
-
 	// Wait for the daemon startup goroutine to finish
 	// This makes sure we can actually cleanly shutdown the daemon
 	logrus.Debug("waiting for daemon to initialize")
