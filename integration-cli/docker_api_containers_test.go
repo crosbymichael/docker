@@ -127,7 +127,7 @@ func (s *DockerSuite) TestContainerApiStartVolumeBinds(c *check.C) {
 	config = map[string]interface{}{
 		"Binds": []string{bindPath + ":/tmp"},
 	}
-	status, _, err = sockRequest("POST", "/containers/"+name+"/start", config)
+	status, data, err = sockRequest("POST", "/containers/"+name+"/start", config)
 	c.Assert(status, check.Equals, http.StatusNoContent)
 	c.Assert(err, check.IsNil)
 
@@ -163,7 +163,7 @@ func (s *DockerSuite) TestContainerApiStartDupVolumeBinds(c *check.C) {
 	c.Assert(status, check.Equals, http.StatusInternalServerError)
 	c.Assert(err, check.IsNil)
 
-	if !strings.Contains(string(body), "Duplicate volume") {
+	if !strings.Contains(string(body), "Duplicate bind") {
 		c.Fatalf("Expected failure due to duplicate bind mounts to same path, instead got: %q with error: %v", string(body), err)
 	}
 }
