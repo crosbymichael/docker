@@ -91,6 +91,16 @@ func (daemon *Daemon) Create(config *runconfig.Config, hostConfig *runconfig.Hos
 		return nil, nil, err
 	}
 	defer container.Unmount()
+
+	uniqueDestination := func(destination string) bool {
+		for _, volumeConfig := range container.VolumeConfig {
+			if volumeConfig.Destination == destination {
+				return false
+			}
+		}
+		return true
+	}
+
 	for spec := range config.Volumes {
 		var (
 			name, destination string
@@ -102,6 +112,11 @@ func (daemon *Daemon) Create(config *runconfig.Config, hostConfig *runconfig.Hos
 		default:
 			name = stringid.GenerateRandomID()
 			destination = parts[0]
+		}
+		// Skip volumes for which we already have something mounted on that
+		// destination because of a --volume-from.
+		if !uniqueDestination(destination) {
+			continue
 		}
 		path, err := container.getResourcePath(destination)
 		if err != nil {

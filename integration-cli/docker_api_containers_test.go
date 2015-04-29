@@ -127,7 +127,7 @@ func (s *DockerSuite) TestContainerApiStartVolumeBinds(c *check.C) {
 	config = map[string]interface{}{
 		"Binds": []string{bindPath + ":/tmp"},
 	}
-	status, data, err = sockRequest("POST", "/containers/"+name+"/start", config)
+	status, _, err = sockRequest("POST", "/containers/"+name+"/start", config)
 	c.Assert(status, check.Equals, http.StatusNoContent)
 	c.Assert(err, check.IsNil)
 

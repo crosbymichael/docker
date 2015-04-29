@@ -312,39 +312,6 @@ func (s *DockerSuite) TestDaemonAllocatesListeningPort(c *check.C) {
 
 }
 
-// #9629
-func (s *DockerSuite) TestDaemonVolumesBindsRefs(c *check.C) {
-	d := NewDaemon(c)
-
-	if err := d.StartWithBusybox(); err != nil {
-		c.Fatal(err)
-	}
-	defer d.Stop()
-
-	tmp, err := ioutil.TempDir(os.TempDir(), "")
-	if err != nil {
-		c.Fatal(err)
-	}
-	defer os.RemoveAll(tmp)
-
-	if err := ioutil.WriteFile(tmp+"/test", []byte("testing"), 0655); err != nil {
-		c.Fatal(err)
-	}
-
-	if out, err := d.Cmd("create", "-v", tmp+":/foo", "--name=voltest", "busybox"); err != nil {
-		c.Fatal(err, out)
-	}
-
-	if err := d.Restart(); err != nil {
-		c.Fatal(err)
-	}
-
-	if out, err := d.Cmd("run", "--volumes-from=voltest", "--name=consumer", "busybox", "/bin/sh", "-c", "[ -f /foo/test ]"); err != nil {
-		c.Fatal(err, out)
-	}
-
-}
-
 func (s *DockerSuite) TestDaemonKeyGeneration(c *check.C) {
 	// TODO: skip or update for Windows daemon
 	os.Remove("/etc/docker/key.json")
@@ -392,80 +359,6 @@ func (s *DockerSuite) TestDaemonKeyMigration(c *check.C) {
 	}
 	if k1.KeyID() != k2.KeyID() {
 		c.Fatalf("Key not migrated")
-	}
-
-}
-
-// Simulate an older daemon (pre 1.3) coming up with volumes specified in containers
-//	without corresponding volume json
-func (s *DockerSuite) TestDaemonUpgradeWithVolumes(c *check.C) {
-	d := NewDaemon(c)
-
-	graphDir := filepath.Join(os.TempDir(), "docker-test")
-	defer os.RemoveAll(graphDir)
-	if err := d.StartWithBusybox("-g", graphDir); err != nil {
-		c.Fatal(err)
-	}
-	defer d.Stop()
-
-	tmpDir := filepath.Join(os.TempDir(), "test")
-	defer os.RemoveAll(tmpDir)
-
-	if out, err := d.Cmd("create", "-v", tmpDir+":/foo", "--name=test", "busybox"); err != nil {
-		c.Fatal(err, out)
-	}
-
-	if err := d.Stop(); err != nil {
-		c.Fatal(err)
-	}
-
-	// Remove this since we're expecting the daemon to re-create it too
-	if err := os.RemoveAll(tmpDir); err != nil {
-		c.Fatal(err)
-	}
-
-	configDir := filepath.Join(graphDir, "volumes")
-
-	if err := os.RemoveAll(configDir); err != nil {
-		c.Fatal(err)
-	}
-
-	if err := d.Start("-g", graphDir); err != nil {
-		c.Fatal(err)
-	}
-
-	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
-		c.Fatalf("expected volume path %s to exist but it does not", tmpDir)
-	}
-
-	dir, err := ioutil.ReadDir(configDir)
-	if err != nil {
-		c.Fatal(err)
-	}
-	if len(dir) == 0 {
-		c.Fatalf("expected volumes config dir to contain data for new volume")
-	}
-
-	// Now with just removing the volume config and not the volume data
-	if err := d.Stop(); err != nil {
-		c.Fatal(err)
-	}
-
-	if err := os.RemoveAll(configDir); err != nil {
-		c.Fatal(err)
-	}
-
-	if err := d.Start("-g", graphDir); err != nil {
-		c.Fatal(err)
-	}
-
-	dir, err = ioutil.ReadDir(configDir)
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	if len(dir) == 0 {
-		c.Fatalf("expected volumes config dir to contain data for new volume")
 	}
 
 }
