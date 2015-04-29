@@ -475,9 +475,11 @@ func (container *Container) Start() (err error) {
 	if err := populateCommand(container, env); err != nil {
 		return err
 	}
-	if err := container.setupMounts(); err != nil {
+	mounts, err := container.setupMounts()
+	if err != nil {
 		return err
 	}
+	container.command.Mounts = mounts
 	return container.waitForStart()
 }
 
@@ -996,28 +998,17 @@ func (container *Container) Copy(resource string) (io.ReadCloser, error) {
 			container.Unmount()
 		}
 	}()
-	for _, v := range container.volumes {
-		path, err := v.Mount()
-		if err != nil {
-			return nil, err
-		}
-		config := container.VolumeConfig[v.Name()]
-		dest, err := container.GetResourcePath(config.Destination)
-		if err != nil {
-			return nil, err
-		}
-		paths = append(paths, dest)
-		if err := mount.Mount(path, dest, "bind", "bind,ro"); err != nil {
-			return nil, err
-		}
+	mounts, err := container.setupMounts()
+	if err != nil {
+		return nil, err
 	}
-	for _, m := range container.networkMounts() {
+	for _, m := range mounts {
 		dest, err := container.GetResourcePath(m.Destination)
 		if err != nil {
 			return nil, err
 		}
 		paths = append(paths, dest)
-		if err := mount.Mount(m.Source, dest, "bind", "bind,ro"); err != nil {
+		if err := mount.Mount(m.Source, dest, "bind", "rbind,ro"); err != nil {
 			return nil, err
 		}
 	}
@@ -1646,16 +1637,16 @@ func (container *Container) monitorExec(execConfig *execConfig, callback execdri
 	return err
 }
 
-func (container *Container) setupMounts() error {
+func (container *Container) setupMounts() ([]execdriver.Mount, error) {
 	var mounts []execdriver.Mount
 	for _, v := range container.volumes {
 		config, ok := container.VolumeConfig[v.Name()]
 		if !ok {
-			return fmt.Errorf("volume configuration not found for %s", v.Name())
+			return nil, fmt.Errorf("volume configuration not found for %s", v.Name())
 		}
 		path, err := v.Mount()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		mounts = append(mounts, execdriver.Mount{
 			Source:      path,
@@ -1671,8 +1662,7 @@ func (container *Container) setupMounts() error {
 		})
 	}
 	mounts = sortMounts(mounts)
-	container.command.Mounts = append(mounts, container.networkMounts()...)
-	return nil
+	return append(mounts, container.networkMounts()...), nil
 }
 
 func (container *Container) networkMounts() []execdriver.Mount {
@@ -1724,5 +1714,5 @@ func (m mounts) Swap(i, j int) {
 }
 
 func (m mounts) parts(i int) int {
-	return len(filepath.SplitList(filepath.Clean(m[i].Destination)))
+	return len(strings.Split(filepath.Clean(m[i].Destination), string(os.PathSeparator)))
 }

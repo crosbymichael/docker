@@ -1202,9 +1202,54 @@ func (daemon *Daemon) setHostConfig(container *Container, hostConfig *runconfig.
 		return err
 	}
 	var (
-		duplicateVolumes []string
-		binds            = make(map[string]struct{})
+		volumes []*vv
+		binds   = make(map[string]struct{})
 	)
+	for _, v := range hostConfig.VolumesFrom {
+		containerID, mode, err := parseVolumesFrom(v)
+		if err != nil {
+			return err
+		}
+		c, err := daemon.Get(containerID)
+		if err != nil {
+			return err
+		}
+		vf, err := container.addVolumesFrom(c, mode)
+		if err != nil {
+			return err
+		}
+		volumes = append(volumes, vf...)
+	}
+	hasVolumeFrom := func(dest string) bool {
+		for _, vf := range volumes {
+			if vf.vc.Destination == dest {
+				return true
+			}
+		}
+		return false
+	}
+	var (
+		uniqueVolumes       []volume.Volume
+		uniqueVolumeConfigs = make(map[string]*VolumeConfig)
+	)
+	for _, v := range container.volumes {
+		config := container.VolumeConfig[v.Name()]
+		if !hasVolumeFrom(config.Destination) {
+			uniqueVolumes = append(uniqueVolumes, v)
+			uniqueVolumeConfigs[v.Name()] = config
+		}
+	}
+	container.volumes = uniqueVolumes
+	container.VolumeConfig = uniqueVolumeConfigs
+	for _, vf := range volumes {
+		if _, exists := container.VolumeConfig[vf.v.Name()]; exists {
+			continue
+		}
+		container.volumes = append(container.volumes, vf.v)
+		container.VolumeConfig[vf.v.Name()] = vf.vc
+	}
+	uniqueVolumes = []volume.Volume{}
+	uniqueVolumeConfigs = make(map[string]*VolumeConfig)
 	// create bind mounts for container.
 	for _, b := range hostConfig.Binds {
 		// #10618
@@ -1216,42 +1261,58 @@ func (daemon *Daemon) setHostConfig(container *Container, hostConfig *runconfig.
 			return fmt.Errorf("Duplicate bind mount %s", bind.Destination)
 		}
 		binds[bind.Destination] = struct{}{}
-		for name, v := range container.VolumeConfig {
-			if v.Destination == bind.Destination {
-				duplicateVolumes = append(duplicateVolumes, name)
+		if _, err := os.Stat(bind.Source); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			if err := os.MkdirAll(bind.Source, 0755); err != nil {
+				return err
 			}
 		}
 		container.BindMounts = append(container.BindMounts, bind)
 	}
-	for _, n := range duplicateVolumes {
-		delete(container.VolumeConfig, n)
-	}
-	for _, v := range hostConfig.VolumesFrom {
-		containerID, mode, err := parseVolumesFrom(v)
-		if err != nil {
-			return err
-		}
-		c, err := daemon.Get(containerID)
-		if err != nil {
-			return err
-		}
-		for name, config := range c.VolumeConfig {
-			lv, err := daemon.volumeDriver.Create(name)
-			if err != nil {
-				return err
-			}
-			container.volumes = append(container.volumes, lv)
-			// make a copy of the config
-			cp := *config
-			cp.RW = true
-			if mode == "ro" {
-				cp.RW = false
-			}
-			container.VolumeConfig[name] = &cp
+	for _, v := range container.volumes {
+		config := container.VolumeConfig[v.Name()]
+		if !container.containsBind(config.Destination) {
+			uniqueVolumes = append(uniqueVolumes, v)
+			uniqueVolumeConfigs[v.Name()] = config
 		}
 	}
+	container.volumes = uniqueVolumes
+	container.VolumeConfig = uniqueVolumeConfigs
 	container.hostConfig = hostConfig
 	container.toDisk()
-
 	return nil
+}
+
+type vv struct {
+	v  volume.Volume
+	vc *VolumeConfig
+}
+
+func (container *Container) containsBind(dest string) bool {
+	for _, b := range container.BindMounts {
+		if b.Destination == dest {
+			return true
+		}
+	}
+	return false
+}
+
+func (container *Container) addVolumesFrom(c *Container, mode string) ([]*vv, error) {
+	var volumes []*vv
+	for name, config := range c.VolumeConfig {
+		lv, err := container.daemon.volumeDriver.Create(name)
+		if err != nil {
+			return nil, err
+		}
+		// make a copy of the config
+		cp := *config
+		cp.RW = mode != "ro"
+		volumes = append(volumes, &vv{
+			v:  lv,
+			vc: &cp,
+		})
+	}
+	return volumes, nil
 }

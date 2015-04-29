@@ -10,6 +10,10 @@ import (
 type ContainerJSONRaw struct {
 	*Container
 	HostConfig *runconfig.HostConfig
+
+	// Unused fields for backward compatibility with API versions < 1.12.
+	Volumes   map[string]string
+	VolumesRW map[string]bool
 }
 
 func (daemon *Daemon) ContainerInspectRaw(name string) (*ContainerJSONRaw, error) {
@@ -21,7 +25,10 @@ func (daemon *Daemon) ContainerInspectRaw(name string) (*ContainerJSONRaw, error
 	container.Lock()
 	defer container.Unlock()
 
-	return &ContainerJSONRaw{container, container.hostConfig}, nil
+	return &ContainerJSONRaw{
+		Container:  container,
+		HostConfig: container.hostConfig,
+	}, nil
 }
 
 func (daemon *Daemon) ContainerInspect(name string) (*types.ContainerJSON, error) {
