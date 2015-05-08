@@ -53,10 +53,7 @@ func (r *Root) Create(name string) (volume.Volume, error) {
 	v, exists := r.volumes[name]
 	if !exists {
 		path := filepath.Join(r.path, name)
-		if err := os.Mkdir(path, 0755); err != nil {
-			if os.IsExist(err) {
-				return nil, ErrVolumeExists
-			}
+		if err := os.MkdirAll(path, 0755); err != nil {
 			return nil, err
 		}
 		v = &Volume{
