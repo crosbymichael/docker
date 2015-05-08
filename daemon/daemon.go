@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -109,6 +110,7 @@ type Daemon struct {
 	RegistryService  *registry.Service
 	EventsService    *events.Events
 	volumeDriver     volume.Driver
+	root             string
 }
 
 // Get looks for a container using the provided information, which could be
@@ -206,6 +208,47 @@ func (daemon *Daemon) register(container *Container, updateSuffixarray bool) err
 	// we'll waste time if we update it for every container
 	daemon.idIndex.Add(container.ID)
 
+	if container.VolumeConfig == nil {
+		jsonPath, err := container.jsonPath()
+		if err != nil {
+			return err
+		}
+		f, err := os.Open(jsonPath)
+		if err != nil {
+			return err
+		}
+		type oldContVolCfg struct {
+			Volumes   map[string]string
+			VolumesRW map[string]bool
+		}
+		var vols oldContVolCfg
+		if err := json.NewDecoder(f).Decode(&vols); err != nil {
+			return err
+		}
+		for path, hostPath := range vols.Volumes {
+			vfsPath := filepath.Join(daemon.root, "vfs", "dir")
+			if strings.HasPrefix(hostPath, vfsPath) {
+				id := filepath.Base(hostPath)
+				v, err := daemon.volumeDriver.Create(id)
+				if err != nil {
+					continue
+				}
+				if container.VolumeConfig == nil {
+					container.VolumeConfig = map[string]*VolumeConfig{}
+				}
+				container.VolumeConfig[v.Name()] = &VolumeConfig{
+					Driver:      "local",
+					Destination: path,
+					RW:          vols.VolumesRW[path],
+				}
+				v.Mount()
+			}
+		}
+		if err := container.ToDisk(); err != nil {
+			return err
+		}
+	}
+
 	for name := range container.VolumeConfig {
 		v, err := daemon.volumeDriver.Create(name)
 		if err != nil {
@@ -258,10 +301,45 @@ func (daemon *Daemon) restore() error {
 		currentDriver = daemon.driver.String()
 	)
 
+	oldVolumes := filepath.Join(daemon.root, "volumes")
+	newVolumes := filepath.Join(daemon.root, "volume")
+	dir, err := ioutil.ReadDir(oldVolumes)
+	if err == nil {
+		type oldVolCfg struct {
+			Path        string
+			IsBindMount bool
+		}
+		for i, v := range dir {
+			id := v.Name()
+			var vol oldVolCfg
+			f, err := os.Open(filepath.Join(oldVolumes, id, "config.json"))
+			if err != nil {
+				continue
+			}
+			if err := json.NewDecoder(f).Decode(&vol); err != nil {
+				continue
+			}
+			if vol.IsBindMount {
+				continue
+			}
+			if err := os.MkdirAll(newVolumes, 0700); err != nil {
+				continue
+			}
+			if err := os.Rename(vol.Path, filepath.Join(newVolumes, id)); err != nil {
+				logrus.Errorf("error migrating volume data for %s: %v", vol.Path, err)
+				continue
+			}
+			os.RemoveAll(filepath.Join(oldVolumes, id))
+			if i == len(dir)-1 {
+				os.RemoveAll(oldVolumes)
+			}
+		}
+	}
+
 	if !debug {
 		logrus.Info("Loading containers: start.")
 	}
-	dir, err := ioutil.ReadDir(daemon.repository)
+	dir, err = ioutil.ReadDir(daemon.repository)
 	if err != nil {
 		return err
 	}
@@ -833,7 +911,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 		return nil, err
 	}
 
-	volumesDriver, err := local.New(path.Join(config.Root, "volume"))
+	volumesDriver, err := local.New(filepath.Join(config.Root, "volume"))
 	if err != nil {
 		return nil, err
 	}
@@ -923,6 +1001,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	d.RegistryService = registryService
 	d.EventsService = eventsService
 	d.volumeDriver = volumesDriver
+	d.root = config.Root
 
 	if err := d.restore(); err != nil {
 		return nil, err
