@@ -1,8 +1,23 @@
 package signal
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
 	"syscall"
 )
+
+func ParseSignal(rawSignal string) (syscall.Signal, error) {
+	s, err := strconv.Atoi(rawSignal)
+	if err == nil {
+		return syscall.Signal(s), nil
+	}
+	signal, ok := SignalMap[strings.TrimPrefix(strings.ToUpper(rawSignal), "SIG")]
+	if !ok {
+		return -1, fmt.Errorf("Invalid signal: %s", rawSignal)
+	}
+	return signal, nil
+}
 
 // SignalMap is a map of Linux signals.
 var SignalMap = map[string]syscall.Signal{

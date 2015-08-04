@@ -481,9 +481,11 @@ func (container *Container) Stop(seconds int) error {
 	if !container.IsRunning() {
 		return nil
 	}
-
-	// 1. Send a SIGTERM
-	if err := container.killPossiblyDeadProcess(15); err != nil {
+	signal := 15
+	if container.Config.KillSignal != 0 {
+		signal = container.Config.KillSignal
+	}
+	if err := container.killPossiblyDeadProcess(signal); err != nil {
 		logrus.Infof("Failed to send SIGTERM to the process, force killing")
 		if err := container.killPossiblyDeadProcess(9); err != nil {
 			return err

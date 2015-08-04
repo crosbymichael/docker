@@ -6,7 +6,7 @@ import "syscall"
 // If no signal is given (sig 0), then Kill with SIGKILL and wait
 // for the container to exit.
 // If a signal is given, then just send it to the container and return.
-func (daemon *Daemon) ContainerKill(name string, sig uint64) error {
+func (daemon *Daemon) ContainerKill(name string, sig int) error {
 	container, err := daemon.Get(name)
 	if err != nil {
 		return err
