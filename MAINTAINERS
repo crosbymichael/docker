@@ -230,13 +230,6 @@ made through a pull request.
 				"theadactyl"
 			]
 
-	# The chief maintainer is responsible for all aspects of quality for the project including
-	# code reviews, usability, stability, security, performance, etc.
-	# The most important function of the chief maintainer is to lead by example. On the first
-	# day of a new maintainer, the best advice should be "follow the C.M.'s example and you'll
-	# be fine".
-	"Chief Maintainer" = "crosbymichael"
-
 	# The community manager is responsible for serving the project community, including users, 
 	# contributors and partners. This involves:
 	#	- facilitating communication between maintainers, contributors and users
