@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/server/middleware"
 	"github.com/docker/docker/api/server/router"
 	"github.com/docker/docker/errors"
+	"github.com/docker/docker/metrics"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/context"
 )
@@ -154,6 +155,8 @@ func (s *Server) InitRouter(enableProfiler bool, routers ...router.Router) {
 	if enableProfiler {
 		profilerSetup(m)
 	}
+	h := metrics.Handler()
+	m.Handle("/metrics", h)
 	s.routerSwapper = &routerSwapper{
 		router: m,
 	}
