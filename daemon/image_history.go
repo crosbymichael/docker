@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/reference"
@@ -11,6 +12,7 @@ import (
 // ImageHistory returns a slice of ImageHistory structures for the specified image
 // name by walking the image lineage.
 func (daemon *Daemon) ImageHistory(name string) ([]*types.ImageHistory, error) {
+	start := time.Now()
 	img, err := daemon.GetImage(name)
 	if err != nil {
 		return nil, err
@@ -77,6 +79,8 @@ func (daemon *Daemon) ImageHistory(name string) ([]*types.ImageHistory, error) {
 			break
 		}
 	}
+
+	ImageHistoryTimer.UpdateSince(start)
 
 	return history, nil
 }

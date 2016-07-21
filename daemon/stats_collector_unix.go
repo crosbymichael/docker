@@ -104,6 +104,7 @@ func (s *statsCollector) run() {
 	var pairs []publishersPair
 
 	for range time.Tick(s.interval) {
+		start := time.Now()
 		// it does not make sense in the first iteration,
 		// but saves allocations in further iterations
 		pairs = pairs[:0]
@@ -136,6 +137,7 @@ func (s *statsCollector) run() {
 			stats.CPUStats.SystemUsage = systemUsage
 
 			pair.publisher.Publish(*stats)
+			ContainerStatsTimer.UpdateSince(start)
 		}
 	}
 }

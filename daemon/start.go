@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -90,6 +91,7 @@ func (daemon *Daemon) Start(container *container.Container) error {
 // between containers. The container is left waiting for a signal to
 // begin running.
 func (daemon *Daemon) containerStart(container *container.Container) (err error) {
+	start := time.Now()
 	container.Lock()
 	defer container.Unlock()
 
@@ -168,6 +170,8 @@ func (daemon *Daemon) containerStart(container *container.Container) (err error)
 
 		return fmt.Errorf("%s", errDesc)
 	}
+
+	ContainerStartTimer.UpdateSince(start)
 
 	return nil
 }

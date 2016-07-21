@@ -21,7 +21,12 @@ type TimerOpts prometheus.Opts
 
 func NewTimer(o TimerOpts) Timer {
 	return &timer{
-		g: prometheus.NewGauge(prometheus.GaugeOpts{}),
+		m: prometheus.NewSummary(prometheus.SummaryOpts{
+			Namespace: o.Namespace,
+			Subsystem: o.Subsystem,
+			Name:      o.Name,
+			Help:      o.Help,
+		}),
 	}
 }
 
@@ -36,26 +41,26 @@ type Timer interface {
 }
 
 type timer struct {
-	g prometheus.Gauge
+	m prometheus.Summary
 }
 
 func (t *timer) UpdateSince(since time.Time) {
 	ns := time.Now().Sub(since).Nanoseconds()
-	t.g.Set(float64(ns))
+	t.m.Observe(float64(ns))
 }
 
 func (t *timer) Write(d *dto.Metric) error {
-	return t.g.Write(d)
+	return t.m.Write(d)
 }
 
 func (t *timer) Desc() *prometheus.Desc {
-	return t.g.Desc()
+	return t.m.Desc()
 }
 
 func (t *timer) Describe(c chan<- *prometheus.Desc) {
-	t.g.Describe(c)
+	t.m.Describe(c)
 }
 
 func (t *timer) Collect(c chan<- prometheus.Metric) {
-	t.g.Collect(c)
+	t.m.Collect(c)
 }

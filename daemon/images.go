@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"time"
 
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
@@ -42,6 +43,7 @@ func (daemon *Daemon) Images(filterArgs, filter string, all bool) ([]*types.Imag
 		allImages    map[image.ID]*image.Image
 		err          error
 		danglingOnly = false
+		start        = time.Now()
 	)
 
 	imageFilters, err := filters.FromParam(filterArgs)
@@ -175,6 +177,8 @@ func (daemon *Daemon) Images(filterArgs, filter string, all bool) ([]*types.Imag
 	}
 
 	sort.Sort(sort.Reverse(byCreated(images)))
+
+	ImagesListTimer.UpdateSince(start)
 
 	return images, nil
 }

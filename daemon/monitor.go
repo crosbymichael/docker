@@ -28,6 +28,7 @@ func (daemon *Daemon) StateChanged(id string, e libcontainerd.StateInfo) error {
 		}
 		daemon.updateHealthMonitor(c)
 		daemon.LogContainerEvent(c, "oom")
+		ContainersRunningGauge.Sub(1)
 	case libcontainerd.StateExit:
 		c.Lock()
 		defer c.Unlock()
@@ -46,6 +47,7 @@ func (daemon *Daemon) StateChanged(id string, e libcontainerd.StateInfo) error {
 		if err := c.ToDisk(); err != nil {
 			return err
 		}
+		ContainersRunningGauge.Sub(1)
 		return daemon.postRunProcessing(c, e)
 	case libcontainerd.StateRestart:
 		c.Lock()
@@ -58,6 +60,7 @@ func (daemon *Daemon) StateChanged(id string, e libcontainerd.StateInfo) error {
 		}
 		daemon.LogContainerEventWithAttributes(c, "die", attributes)
 		daemon.updateHealthMonitor(c)
+		ContainersRunningGauge.Sub(1)
 		return c.ToDisk()
 	case libcontainerd.StateExitProcess:
 		c.Lock()
@@ -86,6 +89,7 @@ func (daemon *Daemon) StateChanged(id string, e libcontainerd.StateInfo) error {
 			return err
 		}
 		daemon.initHealthMonitor(c)
+		ContainersRunningGauge.Add(1)
 		daemon.LogContainerEvent(c, "start")
 	case libcontainerd.StatePause:
 		// Container is already locked in this case

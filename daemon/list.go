@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/container"
@@ -154,7 +155,10 @@ func (daemon *Daemon) filterByNameIDMatches(ctx *listContext) []*container.Conta
 
 // reduceContainers parses the user's filtering options and generates the list of containers to return based on a reducer.
 func (daemon *Daemon) reduceContainers(config *types.ContainerListOptions, reducer containerReducer) ([]*types.Container, error) {
-	containers := []*types.Container{}
+	var (
+		start      = time.Now()
+		containers = []*types.Container{}
+	)
 
 	ctx, err := daemon.foldFilter(config)
 	if err != nil {
@@ -179,6 +183,8 @@ func (daemon *Daemon) reduceContainers(config *types.ContainerListOptions, reduc
 			ctx.idx++
 		}
 	}
+
+	ListContainerTimer.UpdateSince(start)
 	return containers, nil
 }
 

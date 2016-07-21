@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	clustertypes "github.com/docker/docker/daemon/cluster/provider"
@@ -201,6 +202,7 @@ func (daemon *Daemon) CreateNetwork(create types.NetworkCreateRequest) (*types.N
 }
 
 func (daemon *Daemon) createNetwork(create types.NetworkCreateRequest, id string, agent bool) (*types.NetworkCreateResponse, error) {
+	start := time.Now()
 	// If there is a pending ingress network creation wait here
 	// since ingress network creation can happen via node download
 	// from manager or task download.
@@ -263,6 +265,8 @@ func (daemon *Daemon) createNetwork(create types.NetworkCreateRequest, id string
 	}
 
 	daemon.LogNetworkEvent(n, "create")
+
+	NetworkCreateTimer.UpdateSince(start)
 	return &types.NetworkCreateResponse{
 		ID:      n.ID(),
 		Warning: warning,

@@ -12,6 +12,7 @@ import (
 // LookupImage looks up an image by name and returns it as an ImageInspect
 // structure.
 func (daemon *Daemon) LookupImage(name string) (*types.ImageInspect, error) {
+	start := time.Now()
 	img, err := daemon.GetImage(name)
 	if err != nil {
 		return nil, fmt.Errorf("No such image: %s", name)
@@ -77,5 +78,6 @@ func (daemon *Daemon) LookupImage(name string) (*types.ImageInspect, error) {
 
 	imageInspect.GraphDriver.Data = layerMetadata
 
+	ImageInspectTimer.UpdateSince(start)
 	return imageInspect, nil
 }
