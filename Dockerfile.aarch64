@@ -150,12 +150,9 @@ ENV DOCKER_BUILDTAGS apparmor pkcs11 seccomp selinux
 # Let us use a .bashrc file
 RUN ln -sfv $PWD/.bashrc ~/.bashrc
 
-# Register Docker's bash completion.
-RUN ln -sv $PWD/contrib/completion/bash/docker /etc/bash_completion.d/docker
-
 # Get useful and necessary Hub images so we can "docker load" locally instead of pulling
-COPY contrib/download-frozen-image-v2.sh /go/src/github.com/docker/docker/contrib/
-RUN ./contrib/download-frozen-image-v2.sh /docker-frozen-images \
+COPY hack/download-frozen-image-v2.sh /go/src/github.com/docker/docker/hack/
+RUN ./hack/download-frozen-image-v2.sh /docker-frozen-images \
 	aarch64/buildpack-deps:jessie@sha256:6aa1d6910791b7ac78265fd0798e5abd6cb3f27ae992f6f960f6c303ec9535f2 \
 	aarch64/busybox:latest@sha256:b23a6a37cf269dff6e46d2473b6e227afa42b037e6d23435f1d2bc40fc8c2828 \
 	aarch64/debian:jessie@sha256:4be74a41a7c70ebe887b634b11ffe516cf4fcd56864a54941e56bb49883c3170 \
