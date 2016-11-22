@@ -36,7 +36,6 @@ import (
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/libcontainerd"
-	"github.com/docker/docker/migrate/v1"
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/graphdb"
 	"github.com/docker/docker/pkg/idtools"
@@ -550,12 +549,6 @@ func NewDaemon(config *Config, registryService registry.Service, containerdRemot
 	if err := restoreCustomImage(d.imageStore, d.layerStore, referenceStore); err != nil {
 		return nil, fmt.Errorf("Couldn't restore custom images: %s", err)
 	}
-
-	migrationStart := time.Now()
-	if err := v1.Migrate(config.Root, graphDriver, d.layerStore, d.imageStore, referenceStore, distributionMetadataStore); err != nil {
-		logrus.Errorf("Graph migration failed: %q. Your old graph data was found to be too inconsistent for upgrading to content-addressable storage. Some of the old data was probably not upgraded. We recommend starting over with a clean storage directory if possible.", err)
-	}
-	logrus.Infof("Graph migration to content-addressability took %.2f seconds", time.Since(migrationStart).Seconds())
 
 	// Discovery is only enabled when the daemon is launched with an address to advertise.  When
 	// initialized, the daemon is registered and we can store the discovery backend as its read-only
