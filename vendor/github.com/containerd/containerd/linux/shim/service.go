@@ -129,7 +129,7 @@ func (s *Service) Start(ctx context.Context, r *shimapi.StartRequest) (*shimapi.
 	defer s.mu.Unlock()
 	p := s.processes[r.ID]
 	if p == nil {
-		return nil, errdefs.ToGRPCf(errdefs.ErrNotFound, "process %s not found", r.ID)
+		return nil, errdefs.ToGRPCf(errdefs.ErrNotFound, "process %s", r.ID)
 	}
 	if err := p.Start(ctx); err != nil {
 		return nil, err
@@ -235,10 +235,10 @@ func (s *Service) ResizePty(ctx context.Context, r *shimapi.ResizePtyRequest) (*
 // State returns runtime state information for a process
 func (s *Service) State(ctx context.Context, r *shimapi.StateRequest) (*shimapi.StateResponse, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	p := s.processes[r.ID]
-	s.mu.Unlock()
 	if p == nil {
-		return nil, errdefs.ToGRPCf(errdefs.ErrNotFound, "process id %s not found", r.ID)
+		return nil, errdefs.ToGRPCf(errdefs.ErrNotFound, "process id %s", r.ID)
 	}
 	st, err := p.Status(ctx)
 	if err != nil {

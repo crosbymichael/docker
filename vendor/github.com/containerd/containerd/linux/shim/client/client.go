@@ -23,7 +23,6 @@ import (
 	"github.com/containerd/containerd/linux/shim"
 	shimapi "github.com/containerd/containerd/linux/shim/v1"
 	"github.com/containerd/containerd/log"
-	"github.com/containerd/containerd/reaper"
 	"github.com/containerd/containerd/sys"
 	ptypes "github.com/gogo/protobuf/types"
 )
@@ -47,12 +46,8 @@ func WithStart(binary, address, daemonAddress, cgroup string, debug bool, exitHa
 		}
 		defer f.Close()
 
-		cmd, err := newCommand(binary, daemonAddress, debug, config, f)
-		if err != nil {
-			return nil, nil, err
-		}
-		ec, err := reaper.Default.Start(cmd)
-		if err != nil {
+		cmd := newCommand(binary, daemonAddress, debug, config, f)
+		if err := cmd.Start(); err != nil {
 			return nil, nil, errors.Wrapf(err, "failed to start shim")
 		}
 		defer func() {
@@ -61,7 +56,7 @@ func WithStart(binary, address, daemonAddress, cgroup string, debug bool, exitHa
 			}
 		}()
 		go func() {
-			reaper.Default.Wait(cmd, ec)
+			cmd.Wait()
 			exitHandler()
 		}()
 		log.G(ctx).WithFields(logrus.Fields{
@@ -90,10 +85,10 @@ func WithStart(binary, address, daemonAddress, cgroup string, debug bool, exitHa
 	}
 }
 
-func newCommand(binary, daemonAddress string, debug bool, config shim.Config, socket *os.File) (*exec.Cmd, error) {
+func newCommand(binary, daemonAddress string, debug bool, config shim.Config, socket *os.File) *exec.Cmd {
 	selfExe, err := os.Executable()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	args := []string{
 		"-namespace", config.Namespace,
@@ -126,7 +121,7 @@ func newCommand(binary, daemonAddress string, debug bool, config shim.Config, so
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	}
-	return cmd, nil
+	return cmd
 }
 
 func newSocket(address string) (*net.UnixListener, error) {

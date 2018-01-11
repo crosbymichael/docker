@@ -6,9 +6,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
 	"github.com/containerd/cgroups"
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/api/types/task"
@@ -20,6 +17,8 @@ import (
 	"github.com/containerd/containerd/runtime"
 	runc "github.com/containerd/go-runc"
 	"github.com/gogo/protobuf/types"
+	"github.com/pkg/errors"
+	"github.com/stevvooe/ttrpc"
 )
 
 // Task on a linux based system
@@ -109,7 +108,7 @@ func (t *Task) State(ctx context.Context) (runtime.State, error) {
 		ID: t.id,
 	})
 	if err != nil {
-		if err != grpc.ErrServerStopped {
+		if errors.Cause(err) != ttrpc.ErrClosed {
 			return runtime.State{}, errdefs.FromGRPC(err)
 		}
 		return runtime.State{}, errdefs.ErrNotFound
@@ -282,14 +281,11 @@ func (t *Task) Update(ctx context.Context, resources *types.Any) error {
 
 // Process returns a specific process inside the task by the process id
 func (t *Task) Process(ctx context.Context, id string) (runtime.Process, error) {
-	p := &Process{
+	// TODO: verify process exists for container
+	return &Process{
 		id: id,
 		t:  t,
-	}
-	if _, err := p.State(ctx); err != nil {
-		return nil, err
-	}
-	return p, nil
+	}, nil
 }
 
 // Metrics returns runtime specific system level metric information for the task
